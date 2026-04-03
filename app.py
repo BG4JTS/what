@@ -3,13 +3,22 @@ import json
 import uuid
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
-import git
 
-app = Flask(__name__)
+IS_VERCEL = os.environ.get('VERCEL') == '1'
+
+if not IS_VERCEL:
+    import git
+
+app = Flask(__name__, 
+            template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates'))
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
+if IS_VERCEL:
+    DATA_DIR = '/tmp/data'
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = os.path.join(BASE_DIR, 'data')
+
 PROGRAMS_FILE = os.path.join(DATA_DIR, 'programs.json')
 PENDING_FILE = os.path.join(DATA_DIR, 'pending.json')
 
@@ -17,9 +26,13 @@ BRANCH_PENDING = 'pending-review'
 BRANCH_APPROVED = 'approved'
 
 def get_repo():
-    return git.Repo(BASE_DIR)
+    if IS_VERCEL:
+        return None
+    return git.Repo(os.path.dirname(os.path.abspath(__file__)))
 
 def init_branches():
+    if IS_VERCEL:
+        return
     repo = get_repo()
     branches = [b.name for b in repo.branches]
     
@@ -35,6 +48,7 @@ def load_programs():
     return {"programs": []}
 
 def save_programs(data):
+    os.makedirs(DATA_DIR, exist_ok=True)
     with open(PROGRAMS_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -45,10 +59,13 @@ def load_pending():
     return {"programs": []}
 
 def save_pending(data):
+    os.makedirs(DATA_DIR, exist_ok=True)
     with open(PENDING_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def git_commit(branch, message):
+    if IS_VERCEL:
+        return
     repo = get_repo()
     current_branch = repo.active_branch.name
     
