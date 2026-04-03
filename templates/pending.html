@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}待审核 - 节目管理系统{% endblock %}
+
+{% block content %}
+<h2>待审核节目</h2>
+{% if programs %}
+    <div class="programs-grid">
+        {% for program in programs %}
+        <div class="program-card">
+            <span class="program-id">编号: {{ program.id }}</span>
+            <h3 class="program-title">{{ program.title }}</h3>
+            <p class="program-date">发布日期: {{ program.date }}</p>
+            <p class="program-description">{{ program.description[:100] }}{% if program.description|length > 100 %}...{% endif %}</p>
+            <p style="color: #6c757d; font-size: 0.85em; margin-top: 10px;">
+                提交时间: {{ program.created_at[:19].replace('T', ' ') }}
+            </p>
+            <div class="actions">
+                <a href="{{ url_for('approve_program', program_id=program.id) }}" class="btn-success" onclick="return confirm('确定要通过此节目吗？')">通过</a>
+                <a href="{{ url_for('reject_program', program_id=program.id) }}" class="btn-danger" onclick="return confirm('确定要拒绝此节目吗？')">拒绝</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">
+        <h3>没有待审核的节目</h3>
+        <p>所有节目都已审核完毕</p>
+    </div>
+{% endif %}
+{% endblock %}

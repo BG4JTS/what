@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}节目列表 - 节目管理系统{% endblock %}
+
+{% block content %}
+<h2>节目列表</h2>
+{% if programs %}
+    <div class="programs-grid">
+        {% for program in programs %}
+        <div class="program-card">
+            <span class="program-id">编号: {{ program.id }}</span>
+            <h3 class="program-title">{{ program.title }}</h3>
+            <p class="program-date">发布日期: {{ program.date }}</p>
+            <p class="program-description">{{ program.description[:100] }}{% if program.description|length > 100 %}...{% endif %}</p>
+            <a href="{{ program.link }}" class="program-link" target="_blank">收听节目</a>
+            <div style="margin-top: 10px;">
+                <a href="{{ url_for('program_detail', program_id=program.id) }}" style="color: #667eea; text-decoration: none;">查看详情 &rarr;</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">
+        <h3>暂无节目</h3>
+        <p>还没有添加任何节目，点击上方"添加节目"开始吧！</p>
+    </div>
+{% endif %}
+{% endblock %}
