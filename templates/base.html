@@ -588,6 +588,99 @@
             background: #fef3c7;
             color: #92400e;
         }
+        
+        .view-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .view-btn {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+        
+        .view-btn:hover {
+            background: var(--bg-secondary);
+        }
+        
+        .view-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        .program-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .program-item {
+            background: var(--bg-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: var(--card-shadow);
+            transition: all 0.2s;
+        }
+        
+        .program-item:hover {
+            box-shadow: var(--card-shadow-hover);
+        }
+        
+        .program-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .program-code {
+            background: var(--primary-color);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .program-date {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+        
+        .program-item-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        
+        .program-item-desc {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+        
+        .program-item-meta {
+            display: flex;
+            gap: 16px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+        }
+        
+        .program-item-actions {
+            display: flex;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>

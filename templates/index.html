@@ -25,7 +25,43 @@
     </div>
 </div>
 
-<div class="card-grid">
+<div class="view-controls">
+    <span style="color: var(--text-secondary); font-size: 0.9rem;">视图：</span>
+    <button class="view-btn active" id="listViewBtn" onclick="setView('list')">
+        <i class="fas fa-list"></i>
+    </button>
+    <button class="view-btn" id="gridViewBtn" onclick="setView('grid')">
+        <i class="fas fa-th-large"></i>
+    </button>
+</div>
+
+<div id="programList" class="program-list">
+    {% for program in programs %}
+    <div class="program-item">
+        <div class="program-item-header">
+            <span class="program-code">{{ program.code }}</span>
+            <span class="program-date">{{ program.date }}</span>
+        </div>
+        <h3 class="program-item-title">{{ program.title }}</h3>
+        <p class="program-item-desc">{{ program.description }}</p>
+        <div class="program-item-meta">
+            {% if program.author %}
+            <span><i class="fas fa-user"></i> {{ program.author }}</span>
+            {% endif %}
+        </div>
+        <div class="program-item-actions">
+            <a href="{{ program.link }}" target="_blank" class="btn btn-primary btn-sm">
+                <i class="fas fa-play"></i> 收听
+            </a>
+            <a href="{{ url_for('program_detail', program_id=program.id) }}" class="btn btn-secondary btn-sm">
+                <i class="fas fa-info-circle"></i> 详情
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="programGrid" class="card-grid" style="display: none;">
     {% for program in programs %}
     <div class="card">
         <div class="card-header">
@@ -50,6 +86,34 @@
     </div>
     {% endfor %}
 </div>
+
+<script>
+function setView(view) {
+    var listView = document.getElementById('programList');
+    var gridView = document.getElementById('programGrid');
+    var listBtn = document.getElementById('listViewBtn');
+    var gridBtn = document.getElementById('gridViewBtn');
+    
+    if (view === 'list') {
+        listView.style.display = 'block';
+        gridView.style.display = 'none';
+        listBtn.classList.add('active');
+        gridBtn.classList.remove('active');
+    } else {
+        listView.style.display = 'none';
+        gridView.style.display = 'grid';
+        listBtn.classList.remove('active');
+        gridBtn.classList.add('active');
+    }
+    
+    localStorage.setItem('programView', view);
+}
+
+(function() {
+    var savedView = localStorage.getItem('programView') || 'list';
+    setView(savedView);
+})();
+</script>
 {% else %}
 <div class="empty-state">
     <i class="fas fa-podcast"></i>

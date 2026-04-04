@@ -50,7 +50,7 @@
     
     {% if related_programs %}
     <div class="detail-section">
-        <h3>关联节目</h3>
+        <h3>关联节目 ({{ related_programs|length }}个)</h3>
         <div class="related-tags">
             {% for rel in related_programs %}
             <a href="{{ url_for('program_detail', program_id=rel.id) }}" class="related-tag">
@@ -61,14 +61,22 @@
     </div>
     {% endif %}
     
-    {% if referenced_by %}
-    <div class="detail-section">
-        <h3>被以下节目引用</h3>
-        <div class="related-tags">
+    {% if referenced_by and referenced_by|length > 0 %}
+    <div class="detail-section" style="background: #fef3c7; padding: 16px; border-radius: 8px; margin-top: 16px;">
+        <h3 style="color: #92400e;"><i class="fas fa-link"></i> 被以下节目引用 ({{ referenced_by|length }}个)</h3>
+        <div style="margin-top: 12px;">
             {% for ref in referenced_by %}
-            <a href="{{ url_for('program_detail', program_id=ref.source_program_id) }}" class="related-tag" style="background: #fef3c7; color: #92400e;">
-                <i class="fas fa-link"></i> {{ ref.source_program_title }}
-            </a>
+            <div style="display: flex; align-items: center; gap: 12px; padding: 10px; background: white; border-radius: 6px; margin-bottom: 8px;">
+                <i class="fas fa-arrow-right" style="color: #d97706;"></i>
+                <div style="flex: 1;">
+                    <a href="{{ url_for('program_detail', program_id=ref.source_program_id) }}" style="color: #92400e; font-weight: 500;">
+                        {{ ref.source_program_title }}
+                    </a>
+                    <p style="font-size: 0.8rem; color: #a16207; margin-top: 2px;">
+                        引用者: {{ ref.author }} | {{ ref.created_at[:19].replace('T', ' ') }}
+                    </p>
+                </div>
+            </div>
             {% endfor %}
         </div>
     </div>
