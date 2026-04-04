@@ -172,6 +172,21 @@ def get_pr_list(state='open'):
         return resp.json()
     return []
 
+def merge_pr(pr_number, commit_message=''):
+    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls/{pr_number}/merge'
+    data = {
+        'commit_message': commit_message,
+        'merge_method': 'squash'
+    }
+    resp = requests.put(url, headers=github_headers(), json=data)
+    return resp.status_code == 200
+
+def close_pr(pr_number):
+    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls/{pr_number}'
+    data = {'state': 'closed'}
+    resp = requests.patch(url, headers=github_headers(), json=data)
+    return resp.status_code == 200
+
 def load_programs_local():
     if os.path.exists(PROGRAMS_FILE):
         with open(PROGRAMS_FILE, 'r', encoding='utf-8') as f:
@@ -411,6 +426,93 @@ def list_pending():
     pending_data = load_pending_local()
     programs = pending_data.get('programs', [])
     return render_template('pending.html', programs=programs)
+
+@app.route('/approve/<program_id>')
+@login_required
+def approve_program(program_id):
+    if not current_user.is_admin:
+        flash('只有管理员才能审核节目', 'error')
+        return redirect(url_for('list_pending'))
+    
+    pending_data = load_pending_local()
+    
+    program = None
+    for p in pending_data['programs']:
+        if p['id'] == program_id:
+            program = p
+            break
+    
+    if not program:
+        flash('节目不存在！', 'error')
+        return redirect(url_for('list_pending'))
+    
+    program['status'] = 'approved'
+    program['approved_at'] = datetime.now().isoformat()
+    program['approved_by'] = current_user.username
+    
+    if GITHUB_TOKEN and program.get('pr_number'):
+        try:
+            programs_data = get_file_content('data/programs.json', 'main')
+            if not programs_data.get('programs'):
+                programs_data = {"programs": []}
+            programs_data['programs'].append(program)
+            
+            update_file('data/programs.json', programs_data, f'审核通过: {program["title"]}')
+            
+            merge_pr(program['pr_number'], f'审核通过: {program["title"]} (审核者: {current_user.username})')
+            
+            save_programs_local(programs_data)
+            
+            pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
+            save_pending_local(pending_data)
+            
+            update_admin_status()
+            
+            flash(f'节目 "{program["title"]}" 已审核通过！', 'success')
+        except Exception as e:
+            flash(f'审核失败: {str(e)}', 'error')
+    else:
+        programs_data = load_programs_local()
+        programs_data['programs'].append(program)
+        save_programs_local(programs_data)
+        
+        pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
+        save_pending_local(pending_data)
+        
+        flash(f'节目 "{program["title"]}" 已审核通过！', 'success')
+    
+    return redirect(url_for('list_pending'))
+
+@app.route('/reject/<program_id>')
+@login_required
+def reject_program(program_id):
+    if not current_user.is_admin:
+        flash('只有管理员才能审核节目', 'error')
+        return redirect(url_for('list_pending'))
+    
+    pending_data = load_pending_local()
+    
+    program = None
+    for p in pending_data['programs']:
+        if p['id'] == program_id:
+            program = p
+            break
+    
+    if not program:
+        flash('节目不存在！', 'error')
+        return redirect(url_for('list_pending'))
+    
+    if GITHUB_TOKEN and program.get('pr_number'):
+        try:
+            close_pr(program['pr_number'])
+        except:
+            pass
+    
+    pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
+    save_pending_local(pending_data)
+    
+    flash(f'节目 "{program["title"]}" 已被拒绝！', 'info')
+    return redirect(url_for('list_pending'))
 
 @app.route('/program/<program_id>')
 def program_detail(program_id):

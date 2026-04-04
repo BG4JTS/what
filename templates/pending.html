@@ -3,10 +3,12 @@
 
 {% block content %}
 <h2>待审核节目</h2>
+{% if not current_user.is_authenticated or not current_user.is_admin %}
 <p style="color: #6c757d; margin-bottom: 20px;">
-    审核功能已禁用，请通过GitHub合并PR来审核节目。
+    审核功能仅限管理员使用。也可以通过GitHub合并PR来审核节目。
     <a href="https://github.com/{{ 'BG4JTS/what' }}/pulls" target="_blank" style="color: #667eea;">查看所有PR</a>
 </p>
+{% endif %}
 {% if programs %}
     <div class="programs-grid">
         {% for program in programs %}
@@ -17,8 +19,31 @@
             <p class="program-description">{{ program.description[:100] }}{% if program.description|length > 100 %}...{% endif %}</p>
             <p style="color: #6c757d; font-size: 0.85em; margin-top: 10px;">
                 提交时间: {{ program.created_at[:19].replace('T', ' ') }}
+                {% if program.author %}
+                | 提交者: {{ program.author }}
+                {% endif %}
             </p>
-            {% if program.pr_number %}
+            {% if current_user.is_authenticated and current_user.is_admin %}
+            <div class="actions" style="display: flex; gap: 10px; margin-top: 15px;">
+                <a href="{{ url_for('approve_program', program_id=program.id) }}" 
+                   class="btn-success" 
+                   style="background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; padding: 8px 20px; border-radius: 20px; text-decoration: none; font-size: 0.9em;"
+                   onclick="return confirm('确定要通过此节目吗？')">
+                    通过
+                </a>
+                <a href="{{ url_for('reject_program', program_id=program.id) }}" 
+                   class="btn-danger"
+                   style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 8px 20px; border-radius: 20px; text-decoration: none; font-size: 0.9em;"
+                   onclick="return confirm('确定要拒绝此节目吗？')">
+                    拒绝
+                </a>
+                {% if program.pr_number %}
+                <a href="https://github.com/{{ 'BG4JTS/what' }}/pull/{{ program.pr_number }}" target="_blank" style="color: #667eea; padding: 8px 10px; text-decoration: none; font-size: 0.9em;">
+                    PR #{{ program.pr_number }}
+                </a>
+                {% endif %}
+            </div>
+            {% elif program.pr_number %}
             <div class="actions">
                 <a href="https://github.com/{{ 'BG4JTS/what' }}/pull/{{ program.pr_number }}" target="_blank" class="program-link" style="text-decoration: none;">
                     查看 PR #{{ program.pr_number }}
