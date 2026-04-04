@@ -2,26 +2,49 @@
 {% block title %}节目列表 - 节目管理系统{% endblock %}
 
 {% block content %}
-<h2>节目列表</h2>
+<div class="page-header">
+    <h1 class="page-title">节目列表</h1>
+    <p class="page-desc">浏览所有已审核通过的节目内容</p>
+</div>
+
 {% if programs %}
-    <div class="programs-grid">
-        {% for program in programs %}
-        <div class="program-card">
-            <span class="program-id">编号: {{ program.id }}</span>
-            <h3 class="program-title">{{ program.title }}</h3>
-            <p class="program-date">发布日期: {{ program.date }}</p>
-            <p class="program-description">{{ program.description[:100] }}{% if program.description|length > 100 %}...{% endif %}</p>
-            <a href="{{ program.link }}" class="program-link" target="_blank">收听节目</a>
-            <div style="margin-top: 10px;">
-                <a href="{{ url_for('program_detail', program_id=program.id) }}" style="color: #667eea; text-decoration: none;">查看详情 &rarr;</a>
-            </div>
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ programs|length }}</div>
+        <div class="stat-label">总节目数</div>
+    </div>
+</div>
+
+<div class="card-grid">
+    {% for program in programs %}
+    <div class="card">
+        <div class="card-header">
+            <span class="card-id">#{{ program.id }}</span>
         </div>
-        {% endfor %}
+        <h3 class="card-title">{{ program.title }}</h3>
+        <div class="card-meta">
+            <span><i class="fas fa-calendar"></i> {{ program.date }}</span>
+            {% if program.author %}
+            <span><i class="fas fa-user"></i> {{ program.author }}</span>
+            {% endif %}
+        </div>
+        <p class="card-desc">{{ program.description[:120] }}{% if program.description|length > 120 %}...{% endif %}</p>
+        <div class="card-actions">
+            <a href="{{ program.link }}" target="_blank" class="btn btn-primary btn-sm">
+                <i class="fas fa-play"></i> 收听
+            </a>
+            <a href="{{ url_for('program_detail', program_id=program.id) }}" class="btn btn-secondary btn-sm">
+                <i class="fas fa-info-circle"></i> 详情
+            </a>
+        </div>
     </div>
+    {% endfor %}
+</div>
 {% else %}
-    <div class="empty-state">
-        <h3>暂无节目</h3>
-        <p>还没有添加任何节目，点击上方"添加节目"开始吧！</p>
-    </div>
+<div class="empty-state">
+    <i class="fas fa-podcast"></i>
+    <h3>暂无节目</h3>
+    <p>还没有添加任何节目，登录后点击"添加节目"开始吧！</p>
+</div>
 {% endif %}
 {% endblock %}

@@ -2,38 +2,47 @@
 {% block title %}添加节目 - 节目管理系统{% endblock %}
 
 {% block content %}
-<h2>添加新节目</h2>
-<form method="POST" action="{{ url_for('add_program') }}">
-    <div class="form-group">
-        <label for="title">节目标题 *</label>
-        <input type="text" id="title" name="title" required placeholder="请输入节目标题">
-    </div>
-    
-    <div class="form-group">
-        <label for="date">发布日期 *</label>
-        <input type="text" id="date" name="date" required placeholder="格式: YYYY-M-D (如: 2024-1-15)" pattern="\d{4}-\d{1,2}-\d{1,2}">
-    </div>
-    
-    <div class="form-group">
-        <label for="description">节目描述 *</label>
-        <textarea id="description" name="description" rows="5" required placeholder="请输入节目内容简介"></textarea>
-    </div>
-    
-    <div class="form-group">
-        <label for="link">收听链接 *</label>
-        <input type="url" id="link" name="link" required placeholder="https://example.com/program">
-    </div>
-    
-    <div class="form-group">
-        <label for="related">关联节目 (可选)</label>
-        <select id="related" name="related" multiple style="height: 150px;">
-            {% for program in programs %}
-            <option value="{{ program.id }}">{{ program.title }} ({{ program.id }})</option>
-            {% endfor %}
-        </select>
-        <small style="color: #6c757d; display: block; margin-top: 5px;">按住 Ctrl 或 Cmd 键可多选</small>
-    </div>
-    
-    <button type="submit" class="btn">提交审核</button>
-</form>
+<div class="page-header">
+    <h1 class="page-title">添加新节目</h1>
+    <p class="page-desc">填写节目信息并提交审核</p>
+</div>
+
+<div class="form-container">
+    <form method="POST" action="{{ url_for('add_program') }}">
+        <div class="form-group">
+            <label for="title">节目标题 *</label>
+            <input type="text" id="title" name="title" required placeholder="请输入节目标题">
+        </div>
+        
+        <div class="form-group">
+            <label for="date">发布日期 *</label>
+            <input type="text" id="date" name="date" required placeholder="格式: YYYY-M-D (如: 2024-1-15)" pattern="\d{4}-\d{1,2}-\d{1,2}">
+            <p class="form-hint">日期格式：年-月-日</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">节目描述 *</label>
+            <textarea id="description" name="description" required placeholder="请输入节目内容简介"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="link">收听链接 *</label>
+            <input type="url" id="link" name="link" required placeholder="https://example.com/program">
+        </div>
+        
+        <div class="form-group">
+            <label for="related">关联节目 (可选)</label>
+            <select id="related" name="related" multiple style="height: 120px;">
+                {% for program in programs %}
+                <option value="{{ program.id }}">{{ program.title }} ({{ program.id }})</option>
+                {% endfor %}
+            </select>
+            <p class="form-hint">按住 Ctrl 或 Cmd 键可多选</p>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+            <i class="fas fa-paper-plane"></i> 提交审核
+        </button>
+    </form>
+</div>
 {% endblock %}

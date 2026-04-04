@@ -2,45 +2,71 @@
 {% block title %}{{ program.title }} - 节目管理系统{% endblock %}
 
 {% block content %}
-<a href="{{ url_for('index') }}" style="color: #667eea; text-decoration: none; display: inline-block; margin-bottom: 20px;">&larr; 返回列表</a>
+<a href="{{ url_for('index') }}" class="back-link">
+    <i class="fas fa-arrow-left"></i> 返回列表
+</a>
 
-<h2>{{ program.title }}</h2>
-
-<div class="detail-section">
-    <span class="program-id">编号: {{ program.id }}</span>
-</div>
-
-<div class="detail-section">
-    <h3>发布日期</h3>
-    <p>{{ program.date }}</p>
-</div>
-
-<div class="detail-section">
-    <h3>节目描述</h3>
-    <p style="line-height: 1.8;">{{ program.description }}</p>
-</div>
-
-<div class="detail-section">
-    <h3>收听链接</h3>
-    <a href="{{ program.link }}" class="program-link" target="_blank">点击收听</a>
-</div>
-
-{% if related_programs %}
-<div class="related-section">
-    <h3>关联节目</h3>
-    <div class="related-programs">
-        {% for rel in related_programs %}
-        <a href="{{ url_for('program_detail', program_id=rel.id) }}" class="related-tag" style="text-decoration: none; color: #333;">
-            {{ rel.title }}
-        </a>
-        {% endfor %}
+<div class="detail-card">
+    <div class="detail-section">
+        <h3>节目编号</h3>
+        <p>#{{ program.id }}</p>
     </div>
-</div>
-{% endif %}
-
-<div class="detail-section" style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #dee2e6;">
-    <p style="color: #6c757d; font-size: 0.9em;">
-        审核通过时间: {{ program.approved_at[:19].replace('T', ' ') if program.approved_at else '未知' }}
-    </p>
+    
+    <div class="detail-section">
+        <h3>节目标题</h3>
+        <p style="font-size: 1.5rem; font-weight: 600;">{{ program.title }}</p>
+    </div>
+    
+    <div class="detail-section">
+        <h3>发布日期</h3>
+        <p><i class="fas fa-calendar"></i> {{ program.date }}</p>
+    </div>
+    
+    <div class="detail-section">
+        <h3>节目描述</h3>
+        <p>{{ program.description }}</p>
+    </div>
+    
+    <div class="detail-section">
+        <h3>收听链接</h3>
+        <p>
+            <a href="{{ program.link }}" target="_blank" class="btn btn-primary">
+                <i class="fas fa-play"></i> 点击收听
+            </a>
+        </p>
+    </div>
+    
+    {% if program.author %}
+    <div class="detail-section">
+        <h3>提交者</h3>
+        <p><i class="fas fa-user"></i> {{ program.author }}</p>
+    </div>
+    {% endif %}
+    
+    {% if related_programs %}
+    <div class="detail-section">
+        <h3>关联节目</h3>
+        <div class="related-tags">
+            {% for rel in related_programs %}
+            <a href="{{ url_for('program_detail', program_id=rel.id) }}" class="related-tag">
+                {{ rel.title }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if program.approved_at %}
+    <div class="detail-section">
+        <h3>审核信息</h3>
+        <p>
+            <i class="fas fa-check-circle" style="color: #059669;"></i>
+            审核通过时间: {{ program.approved_at[:19].replace('T', ' ') }}
+            {% if program.approved_by %}
+            | 审核者: {{ program.approved_by }}
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

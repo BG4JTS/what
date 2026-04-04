@@ -2,63 +2,75 @@
 {% block title %}待审核 - 节目管理系统{% endblock %}
 
 {% block content %}
-<h2>待审核节目</h2>
-{% if not current_user.is_authenticated or not current_user.is_admin %}
-<p style="color: #6c757d; margin-bottom: 20px;">
-    审核功能仅限管理员使用。也可以通过GitHub合并PR来审核节目。
-    <a href="https://github.com/{{ 'BG4JTS/what' }}/pulls" target="_blank" style="color: #667eea;">查看所有PR</a>
-</p>
-{% endif %}
+<div class="page-header">
+    <h1 class="page-title">待审核节目</h1>
+    {% if not current_user.is_authenticated or not current_user.is_admin %}
+    <p class="page-desc">审核功能仅限管理员使用。也可以通过 <a href="https://github.com/BG4JTS/what/pulls" target="_blank" style="color: var(--primary-color);">GitHub PR</a> 审核</p>
+    {% else %}
+    <p class="page-desc">审核用户提交的节目内容</p>
+    {% endif %}
+</div>
+
 {% if programs %}
-    <div class="programs-grid">
-        {% for program in programs %}
-        <div class="program-card">
-            <span class="program-id">编号: {{ program.id }}</span>
-            <h3 class="program-title">{{ program.title }}</h3>
-            <p class="program-date">发布日期: {{ program.date }}</p>
-            <p class="program-description">{{ program.description[:100] }}{% if program.description|length > 100 %}...{% endif %}</p>
-            <p style="color: #6c757d; font-size: 0.85em; margin-top: 10px;">
-                提交时间: {{ program.created_at[:19].replace('T', ' ') }}
-                {% if program.author %}
-                | 提交者: {{ program.author }}
-                {% endif %}
-            </p>
-            {% if current_user.is_authenticated and current_user.is_admin %}
-            <div class="actions" style="display: flex; gap: 10px; margin-top: 15px;">
-                <a href="{{ url_for('approve_program', program_id=program.id) }}" 
-                   class="btn-success" 
-                   style="background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; padding: 8px 20px; border-radius: 20px; text-decoration: none; font-size: 0.9em;"
-                   onclick="return confirm('确定要通过此节目吗？')">
-                    通过
-                </a>
-                <a href="{{ url_for('reject_program', program_id=program.id) }}" 
-                   class="btn-danger"
-                   style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 8px 20px; border-radius: 20px; text-decoration: none; font-size: 0.9em;"
-                   onclick="return confirm('确定要拒绝此节目吗？')">
-                    拒绝
-                </a>
-                {% if program.pr_number %}
-                <a href="https://github.com/{{ 'BG4JTS/what' }}/pull/{{ program.pr_number }}" target="_blank" style="color: #667eea; padding: 8px 10px; text-decoration: none; font-size: 0.9em;">
-                    PR #{{ program.pr_number }}
-                </a>
-                {% endif %}
-            </div>
-            {% elif program.pr_number %}
-            <div class="actions">
-                <a href="https://github.com/{{ 'BG4JTS/what' }}/pull/{{ program.pr_number }}" target="_blank" class="program-link" style="text-decoration: none;">
-                    查看 PR #{{ program.pr_number }}
-                </a>
-            </div>
-            {% else %}
-            <p style="color: #dc3545; font-size: 0.85em;">未创建PR（本地模式）</p>
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ programs|length }}</div>
+        <div class="stat-label">待审核</div>
+    </div>
+</div>
+
+<div class="card-grid">
+    {% for program in programs %}
+    <div class="card">
+        <div class="card-header">
+            <span class="card-id">#{{ program.id }}</span>
+        </div>
+        <h3 class="card-title">{{ program.title }}</h3>
+        <div class="card-meta">
+            <span><i class="fas fa-calendar"></i> {{ program.date }}</span>
+            {% if program.author %}
+            <span><i class="fas fa-user"></i> {{ program.author }}</span>
             {% endif %}
         </div>
-        {% endfor %}
+        <p class="card-desc">{{ program.description[:100] }}{% if program.description|length > 100 %}...{% endif %}</p>
+        
+        {% if current_user.is_authenticated and current_user.is_admin %}
+        <div class="card-actions">
+            <a href="{{ url_for('approve_program', program_id=program.id) }}" 
+               class="btn btn-success btn-sm"
+               onclick="return confirm('确定要通过此节目吗？')">
+                <i class="fas fa-check"></i> 通过
+            </a>
+            <a href="{{ url_for('reject_program', program_id=program.id) }}" 
+               class="btn btn-danger btn-sm"
+               onclick="return confirm('确定要拒绝此节目吗？')">
+                <i class="fas fa-times"></i> 拒绝
+            </a>
+            {% if program.pr_number %}
+            <a href="https://github.com/BG4JTS/what/pull/{{ program.pr_number }}" target="_blank" class="btn btn-secondary btn-sm">
+                <i class="fab fa-github"></i> PR
+            </a>
+            {% endif %}
+        </div>
+        {% elif program.pr_number %}
+        <div class="card-actions">
+            <a href="https://github.com/BG4JTS/what/pull/{{ program.pr_number }}" target="_blank" class="btn btn-primary btn-sm">
+                <i class="fab fa-github"></i> 查看 PR
+            </a>
+        </div>
+        {% else %}
+        <p style="color: var(--text-secondary); font-size: 0.85rem;">
+            <i class="fas fa-info-circle"></i> 未创建PR（本地模式）
+        </p>
+        {% endif %}
     </div>
+    {% endfor %}
+</div>
 {% else %}
-    <div class="empty-state">
-        <h3>没有待审核的节目</h3>
-        <p>所有节目都已审核完毕</p>
-    </div>
+<div class="empty-state">
+    <i class="fas fa-check-circle"></i>
+    <h3>没有待审核的节目</h3>
+    <p>所有节目都已审核完毕</p>
+</div>
 {% endif %}
 {% endblock %}
