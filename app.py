@@ -89,20 +89,12 @@ def create_pr(title, head_branch, base_branch='main', body=''):
         return resp.json()
     return None
 
-def merge_pr(pr_number, commit_message=''):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls/{pr_number}/merge'
-    data = {
-        'commit_message': commit_message,
-        'merge_method': 'squash'
-    }
-    resp = requests.put(url, headers=github_headers(), json=data)
-    return resp.status_code == 200
-
-def close_pr(pr_number):
+def get_pr(pr_number):
     url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls/{pr_number}'
-    data = {'state': 'closed'}
-    resp = requests.patch(url, headers=github_headers(), json=data)
-    return resp.status_code == 200
+    resp = requests.get(url, headers=github_headers())
+    if resp.status_code == 200:
+        return resp.json()
+    return None
 
 def get_pr_list(state='open'):
     url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls'
@@ -145,11 +137,44 @@ def get_programs():
             pass
     return load_programs_local()
 
+def sync_from_github():
+    if not GITHUB_TOKEN:
+        return False, "未配置GITHUB_TOKEN"
+    
+    try:
+        programs_data = get_file_content('data/programs.json', 'main')
+        save_programs_local(programs_data)
+        
+        pending_data = load_pending_local()
+        pr_list = get_pr_list('open')
+        open_pr_ids = set()
+        for pr in pr_list:
+            if pr['title'].startswith('[待审核]'):
+                for p in pending_data['programs']:
+                    if p.get('pr_number') == pr['number']:
+                        open_pr_ids.add(p['id'])
+        
+        pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] in open_pr_ids or not p.get('pr_number')]
+        save_pending_local(pending_data)
+        
+        return True, f"同步成功！共{len(programs_data.get('programs', []))}个节目"
+    except Exception as e:
+        return False, f"同步失败: {str(e)}"
+
 @app.route('/')
 def index():
     data = get_programs()
     programs = data.get('programs', [])
     return render_template('index.html', programs=programs)
+
+@app.route('/sync')
+def sync():
+    success, message = sync_from_github()
+    if success:
+        flash(message, 'success')
+    else:
+        flash(message, 'error')
+    return redirect(url_for('index'))
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_program():
@@ -188,12 +213,13 @@ def add_program():
                 if pr:
                     program['pr_number'] = pr['number']
                     program['branch'] = branch_name
+                    program['pr_url'] = pr['html_url']
                     
                     pending_local = load_pending_local()
                     pending_local['programs'].append(program)
                     save_pending_local(pending_local)
                     
-                    flash(f'节目已提交！PR #{pr["number"]}', 'success')
+                    flash(f'节目已提交！请在GitHub合并PR: #{pr["number"]}', 'success')
                 else:
                     flash('创建PR失败', 'error')
             except Exception as e:
@@ -215,80 +241,6 @@ def list_pending():
     pending_data = load_pending_local()
     programs = pending_data.get('programs', [])
     return render_template('pending.html', programs=programs)
-
-@app.route('/approve/<program_id>')
-def approve_program(program_id):
-    pending_data = load_pending_local()
-    
-    program = None
-    for p in pending_data['programs']:
-        if p['id'] == program_id:
-            program = p
-            break
-    
-    if not program:
-        flash('节目不存在！', 'error')
-        return redirect(url_for('list_pending'))
-    
-    program['status'] = 'approved'
-    program['approved_at'] = datetime.now().isoformat()
-    
-    if GITHUB_TOKEN:
-        try:
-            programs_data = get_file_content('data/programs.json', 'main')
-            if not programs_data.get('programs'):
-                programs_data = {"programs": []}
-            programs_data['programs'].append(program)
-            update_file('data/programs.json', programs_data, f'审核通过: {program["title"]}')
-            
-            if program.get('pr_number'):
-                merge_pr(program['pr_number'], f'审核通过: {program["title"]}')
-            
-            save_programs_local(programs_data)
-            
-            pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
-            save_pending_local(pending_data)
-            
-            flash('节目已审核通过！', 'success')
-        except Exception as e:
-            flash(f'审核失败: {str(e)}', 'error')
-    else:
-        programs_data = load_programs_local()
-        programs_data['programs'].append(program)
-        save_programs_local(programs_data)
-        
-        pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
-        save_pending_local(pending_data)
-        
-        flash('节目已审核通过！', 'success')
-    
-    return redirect(url_for('list_pending'))
-
-@app.route('/reject/<program_id>')
-def reject_program(program_id):
-    pending_data = load_pending_local()
-    
-    program = None
-    for p in pending_data['programs']:
-        if p['id'] == program_id:
-            program = p
-            break
-    
-    if not program:
-        flash('节目不存在！', 'error')
-        return redirect(url_for('list_pending'))
-    
-    if GITHUB_TOKEN and program.get('pr_number'):
-        try:
-            close_pr(program['pr_number'])
-        except:
-            pass
-    
-    pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
-    save_pending_local(pending_data)
-    
-    flash(f'节目 {program["title"]} 已被拒绝！', 'info')
-    return redirect(url_for('list_pending'))
 
 @app.route('/program/<program_id>')
 def program_detail(program_id):

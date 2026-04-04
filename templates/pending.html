@@ -3,6 +3,10 @@
 
 {% block content %}
 <h2>待审核节目</h2>
+<p style="color: #6c757d; margin-bottom: 20px;">
+    审核功能已禁用，请通过GitHub合并PR来审核节目。
+    <a href="https://github.com/{{ 'BG4JTS/what' }}/pulls" target="_blank" style="color: #667eea;">查看所有PR</a>
+</p>
 {% if programs %}
     <div class="programs-grid">
         {% for program in programs %}
@@ -14,10 +18,15 @@
             <p style="color: #6c757d; font-size: 0.85em; margin-top: 10px;">
                 提交时间: {{ program.created_at[:19].replace('T', ' ') }}
             </p>
+            {% if program.pr_number %}
             <div class="actions">
-                <a href="{{ url_for('approve_program', program_id=program.id) }}" class="btn-success" onclick="return confirm('确定要通过此节目吗？')">通过</a>
-                <a href="{{ url_for('reject_program', program_id=program.id) }}" class="btn-danger" onclick="return confirm('确定要拒绝此节目吗？')">拒绝</a>
+                <a href="https://github.com/{{ 'BG4JTS/what' }}/pull/{{ program.pr_number }}" target="_blank" class="program-link" style="text-decoration: none;">
+                    查看 PR #{{ program.pr_number }}
+                </a>
             </div>
+            {% else %}
+            <p style="color: #dc3545; font-size: 0.85em;">未创建PR（本地模式）</p>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
