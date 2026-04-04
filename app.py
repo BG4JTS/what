@@ -257,16 +257,36 @@ def sync_from_github():
     
     try:
         programs_data = get_file_content('data/programs.json', 'main')
-        save_programs_local(programs_data)
-        
         pending_data = load_pending_local()
-        pr_list = get_pr_list('open')
+        
+        url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls'
+        params = {'state': 'all', 'base': 'main', 'per_page': 100}
+        resp = requests.get(url, headers=github_headers(), params=params)
+        all_prs = resp.json() if resp.status_code == 200 else []
+        
         open_pr_ids = set()
-        for pr in pr_list:
+        merged_programs = []
+        
+        for pr in all_prs:
             if pr['title'].startswith('[待审核]'):
-                for p in pending_data['programs']:
-                    if p.get('pr_number') == pr['number']:
-                        open_pr_ids.add(p['id'])
+                if pr['state'] == 'open':
+                    for p in pending_data['programs']:
+                        if p.get('pr_number') == pr['number']:
+                            open_pr_ids.add(p['id'])
+                elif pr.get('merged_at'):
+                    for p in pending_data['programs']:
+                        if p.get('pr_number') == pr['number']:
+                            if not any(prog.get('pr_number') == pr['number'] for prog in programs_data.get('programs', [])):
+                                p['status'] = 'approved'
+                                p['approved_at'] = pr['merged_at']
+                                p['approved_by'] = pr.get('merged_by', {}).get('login', 'unknown') if pr.get('merged_by') else 'unknown'
+                                merged_programs.append(p)
+        
+        if merged_programs:
+            programs_data['programs'].extend(merged_programs)
+            update_file('data/programs.json', programs_data, f'同步合并已合并的PR节目')
+        
+        save_programs_local(programs_data)
         
         pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] in open_pr_ids or not p.get('pr_number')]
         save_pending_local(pending_data)

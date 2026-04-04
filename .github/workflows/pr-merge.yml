@@ -1,0 +1,80 @@
+name: Handle PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  update-programs:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, '[待审核]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Update programs.json
+        run: |
+          import json
+          import os
+          from datetime import datetime
+          
+          pr_number = ${{ github.event.pull_request.number }}
+          pr_title = "${{ github.event.pull_request.title }}"
+          pr_body = """${{ github.event.pull_request.body }}"""
+          
+          programs_file = "data/programs.json"
+          pending_file = "data/pending.json"
+          
+          if os.path.exists(programs_file):
+              with open(programs_file, 'r', encoding='utf-8') as f:
+                  programs_data = json.load(f)
+          else:
+              programs_data = {"programs": []}
+          
+          if os.path.exists(pending_file):
+              with open(pending_file, 'r', encoding='utf-8') as f:
+                  pending_data = json.load(f)
+          else:
+              pending_data = {"programs": []}
+          
+          program = None
+          for p in pending_data.get('programs', []):
+              if p.get('pr_number') == pr_number:
+                  program = p
+                  break
+          
+          if program:
+              program['status'] = 'approved'
+              program['approved_at'] = datetime.now().isoformat()
+              program['approved_by'] = '${{ github.actor }}'
+              
+              programs_data['programs'].append(program)
+              
+              pending_data['programs'] = [p for p in pending_data.get('programs', []) if p.get('pr_number') != pr_number]
+              
+              with open(programs_file, 'w', encoding='utf-8') as f:
+                  json.dump(programs_data, f, ensure_ascii=False, indent=2)
+              
+              with open(pending_file, 'w', encoding='utf-8') as f:
+                  json.dump(pending_data, f, ensure_ascii=False, indent=2)
+              
+              print(f"Updated programs.json with: {program['title']}")
+          else:
+              print("No matching program found in pending.json")
+        shell: python
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/programs.json data/pending.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "自动更新: PR #${{ github.event.pull_request.number }} 已合并"
+          git push
