@@ -14,7 +14,13 @@ GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
 GITHUB_REPO = os.environ.get('GITHUB_REPO', 'BG4JTS/what')
 GITHUB_API = 'https://api.github.com'
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+IS_VERCEL = os.environ.get('VERCEL') == '1'
+
+if IS_VERCEL:
+    DATA_DIR = '/tmp/data'
+else:
+    DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+
 PROGRAMS_FILE = os.path.join(DATA_DIR, 'programs.json')
 PENDING_FILE = os.path.join(DATA_DIR, 'pending.json')
 
@@ -282,9 +288,14 @@ def program_detail(program_id):
     
     return render_template('detail.html', program=program, related_programs=related_programs)
 
-if __name__ == '__main__':
+def init_data():
     os.makedirs(DATA_DIR, exist_ok=True)
     if not os.path.exists(PROGRAMS_FILE):
         save_programs_local({"programs": []})
-    
+    if not os.path.exists(PENDING_FILE):
+        save_pending_local({"programs": []})
+
+init_data()
+
+if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
