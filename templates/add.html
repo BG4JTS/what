@@ -37,6 +37,36 @@
         </div>
         
         <div class="form-group">
+            <label for="hosts">主播</label>
+            <div class="select-with-add">
+                <select id="hosts" name="hosts" multiple style="height: 100px;">
+                </select>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <input type="text" id="new_host" placeholder="添加新主播">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addNewHost()">
+                        <i class="fas fa-plus"></i> 添加
+                    </button>
+                </div>
+                <p class="form-hint">按住 Ctrl 或 Cmd 键可多选，或添加新主播</p>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="tags">标签</label>
+            <div class="select-with-add">
+                <select id="tags" name="tags" multiple style="height: 100px;">
+                </select>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <input type="text" id="new_tag" placeholder="添加新标签">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addNewTag()">
+                        <i class="fas fa-plus"></i> 添加
+                    </button>
+                </div>
+                <p class="form-hint">按住 Ctrl 或 Cmd 键可多选，或添加新标签</p>
+            </div>
+        </div>
+        
+        <div class="form-group">
             <label for="related">关联已有节目</label>
             <select id="related" name="related" multiple style="height: 120px;">
                 {% for program in programs %}
@@ -67,4 +97,87 @@
         </button>
     </form>
 </div>
+
+<script>
+function loadTags() {
+    fetch('/api/tags')
+        .then(r => r.json())
+        .then(data => {
+            const select = document.getElementById('tags');
+            select.innerHTML = '';
+            data.tags.forEach(tag => {
+                const option = document.createElement('option');
+                option.value = tag.id;
+                option.textContent = tag.name;
+                select.appendChild(option);
+            });
+        });
+}
+
+function loadHosts() {
+    fetch('/api/hosts')
+        .then(r => r.json())
+        .then(data => {
+            const select = document.getElementById('hosts');
+            select.innerHTML = '';
+            data.hosts.forEach(host => {
+                const option = document.createElement('option');
+                option.value = host.id;
+                option.textContent = host.name;
+                select.appendChild(option);
+            });
+        });
+}
+
+function addNewTag() {
+    const input = document.getElementById('new_tag');
+    const name = input.value.trim();
+    if (!name) return;
+    
+    fetch('/api/tags/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.tag) {
+            const select = document.getElementById('tags');
+            const option = document.createElement('option');
+            option.value = data.tag.id;
+            option.textContent = data.tag.name;
+            option.selected = true;
+            select.appendChild(option);
+            input.value = '';
+        }
+    });
+}
+
+function addNewHost() {
+    const input = document.getElementById('new_host');
+    const name = input.value.trim();
+    if (!name) return;
+    
+    fetch('/api/hosts/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.host) {
+            const select = document.getElementById('hosts');
+            const option = document.createElement('option');
+            option.value = data.host.id;
+            option.textContent = data.host.name;
+            option.selected = true;
+            select.appendChild(option);
+            input.value = '';
+        }
+    });
+}
+
+loadTags();
+loadHosts();
+</script>
 {% endblock %}

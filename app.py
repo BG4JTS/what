@@ -32,6 +32,8 @@ PROGRAMS_FILE = os.path.join(DATA_DIR, 'programs.json')
 PENDING_FILE = os.path.join(DATA_DIR, 'pending.json')
 USERS_FILE = os.path.join(DATA_DIR, 'users.json')
 REFERENCES_FILE = os.path.join(DATA_DIR, 'references.json')
+TAGS_FILE = os.path.join(DATA_DIR, 'tags.json')
+HOSTS_FILE = os.path.join(DATA_DIR, 'hosts.json')
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -137,6 +139,74 @@ def check_and_notify_references(program_code, program_title, program_id):
         save_references(refs)
     
     return notifications
+
+def load_tags():
+    if os.path.exists(TAGS_FILE):
+        with open(TAGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f).get('tags', [])
+    return []
+
+def save_tags(tags):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(TAGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump({'tags': tags}, f, ensure_ascii=False, indent=2)
+
+def add_tag(tag_name, author):
+    tags = load_tags()
+    tag_lower = tag_name.strip().lower()
+    for t in tags:
+        if t.get('name', '').lower() == tag_lower:
+            return t
+    new_tag = {
+        'id': str(uuid.uuid4())[:8],
+        'name': tag_name.strip(),
+        'created_at': datetime.now().isoformat(),
+        'created_by': author
+    }
+    tags.append(new_tag)
+    save_tags(tags)
+    return new_tag
+
+def get_tag_by_id(tag_id):
+    tags = load_tags()
+    for t in tags:
+        if t['id'] == tag_id:
+            return t
+    return None
+
+def load_hosts():
+    if os.path.exists(HOSTS_FILE):
+        with open(HOSTS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f).get('hosts', [])
+    return []
+
+def save_hosts(hosts):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(HOSTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump({'hosts': hosts}, f, ensure_ascii=False, indent=2)
+
+def add_host(host_name, author):
+    hosts = load_hosts()
+    host_lower = host_name.strip().lower()
+    for h in hosts:
+        if h.get('name', '').lower() == host_lower:
+            return h
+    new_host = {
+        'id': str(uuid.uuid4())[:8],
+        'name': host_name.strip(),
+        'created_at': datetime.now().isoformat(),
+        'created_by': author
+    }
+    hosts.append(new_host)
+    save_hosts(hosts)
+    return new_host
+
+def get_host_by_id(host_id):
+    hosts = load_hosts()
+    for h in hosts:
+        if h['id'] == host_id:
+            return h
+    return None
 
 def github_headers():
     return {
@@ -356,6 +426,31 @@ def index():
     programs = data.get('programs', [])
     refs = load_references()
     pending_refs = [r for r in refs.get('references', []) if not r.get('notified')]
+    
+    tags = load_tags()
+    hosts = load_hosts()
+    
+    for program in programs:
+        program_tags = []
+        for tag_id in program.get('tags', []):
+            for t in tags:
+                if t['id'] == tag_id:
+                    program_tags.append(t)
+                    break
+            else:
+                program_tags.append({'id': tag_id, 'name': tag_id})
+        program['tags'] = program_tags
+        
+        program_hosts = []
+        for host_id in program.get('hosts', []):
+            for h in hosts:
+                if h['id'] == host_id:
+                    program_hosts.append(h)
+                    break
+            else:
+                program_hosts.append({'id': host_id, 'name': host_id})
+        program['hosts'] = program_hosts
+    
     return render_template('index.html', programs=programs, pending_refs=pending_refs)
 
 @app.route('/login')
@@ -452,6 +547,8 @@ def add_program():
             return render_template('add.html', programs=programs_data.get('programs', []))
         
         related_ids = request.form.getlist('related')
+        tag_ids = request.form.getlist('tags')
+        host_ids = request.form.getlist('hosts')
         
         future_ref_code = request.form.get('future_ref_code', '').strip()
         future_ref_title = request.form.get('future_ref_title', '').strip()
@@ -464,6 +561,8 @@ def add_program():
             'date': request.form.get('date'),
             'link': request.form.get('link'),
             'related': related_ids,
+            'tags': tag_ids,
+            'hosts': host_ids,
             'status': 'pending',
             'created_at': datetime.now().isoformat(),
             'author': current_user.username
@@ -645,6 +744,30 @@ def program_detail(program_id):
                 related_programs.append(p)
                 break
     
+    tags = load_tags()
+    hosts = load_hosts()
+    
+    program_tags = []
+    for tag_id in program.get('tags', []):
+        for t in tags:
+            if t['id'] == tag_id:
+                program_tags.append(t)
+                break
+        else:
+            program_tags.append({'id': tag_id, 'name': tag_id})
+    
+    program_hosts = []
+    for host_id in program.get('hosts', []):
+        for h in hosts:
+            if h['id'] == host_id:
+                program_hosts.append(h)
+                break
+        else:
+            program_hosts.append({'id': host_id, 'name': host_id})
+    
+    program['tags'] = program_tags
+    program['hosts'] = program_hosts
+    
     refs = load_references()
     referenced_by = [r for r in refs.get('references', []) if r.get('matched_program_id') == program_id]
     
@@ -666,8 +789,42 @@ def init_data():
         save_users([])
     if not os.path.exists(REFERENCES_FILE):
         save_references({"references": []})
+    if not os.path.exists(TAGS_FILE):
+        save_tags([])
+    if not os.path.exists(HOSTS_FILE):
+        save_hosts([])
 
 init_data()
+
+@app.route('/api/tags')
+def api_get_tags():
+    tags = load_tags()
+    return jsonify({'tags': tags})
+
+@app.route('/api/tags/add', methods=['POST'])
+@login_required
+def api_add_tag():
+    name = request.json.get('name', '').strip()
+    if not name:
+        return jsonify({'error': '名称不能为空'}), 400
+    
+    tag = add_tag(name, current_user.username)
+    return jsonify({'tag': tag})
+
+@app.route('/api/hosts')
+def api_get_hosts():
+    hosts = load_hosts()
+    return jsonify({'hosts': hosts})
+
+@app.route('/api/hosts/add', methods=['POST'])
+@login_required
+def api_add_host():
+    name = request.json.get('name', '').strip()
+    if not name:
+        return jsonify({'error': '名称不能为空'}), 400
+    
+    host = add_host(name, current_user.username)
+    return jsonify({'host': host})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

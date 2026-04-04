@@ -45,10 +45,20 @@
         <h3 class="program-item-title">{{ program.title }}</h3>
         <p class="program-item-desc">{{ program.description }}</p>
         <div class="program-item-meta">
+            {% if program.hosts %}
+            <span><i class="fas fa-microphone"></i> {{ program.hosts|map(attribute='name')|join(', ') if program.hosts[0] is mapping else program.hosts|join(', ') }}</span>
+            {% endif %}
             {% if program.author %}
             <span><i class="fas fa-user"></i> {{ program.author }}</span>
             {% endif %}
         </div>
+        {% if program.tags %}
+        <div class="program-item-tags">
+            {% for tag in program.tags %}
+            <span class="tag-badge">{{ tag.name if tag is mapping else tag }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
         <div class="program-item-actions">
             <a href="{{ program.link }}" target="_blank" class="btn btn-primary btn-sm">
                 <i class="fas fa-play"></i> 收听
@@ -70,11 +80,18 @@
         <h3 class="card-title">{{ program.title }}</h3>
         <div class="card-meta">
             <span><i class="fas fa-calendar"></i> {{ program.date }}</span>
-            {% if program.author %}
-            <span><i class="fas fa-user"></i> {{ program.author }}</span>
+            {% if program.hosts %}
+            <span><i class="fas fa-microphone"></i> {{ program.hosts|map(attribute='name')|join(', ') if program.hosts[0] is mapping else program.hosts|join(', ') }}</span>
             {% endif %}
         </div>
         <p class="card-desc">{{ program.description[:120] }}{% if program.description|length > 120 %}...{% endif %}</p>
+        {% if program.tags %}
+        <div style="margin-bottom: 12px;">
+            {% for tag in program.tags %}
+            <span class="tag-badge">{{ tag.name if tag is mapping else tag }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
         <div class="card-actions">
             <a href="{{ program.link }}" target="_blank" class="btn btn-primary btn-sm">
                 <i class="fas fa-play"></i> 收听

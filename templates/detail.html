@@ -41,6 +41,32 @@
         </p>
     </div>
     
+    {% if program.hosts %}
+    <div class="detail-section">
+        <h3>主播</h3>
+        <div class="related-tags">
+            {% for host in program.hosts %}
+            <span class="related-tag" style="background: #dbeafe; color: #1e40af;">
+                <i class="fas fa-user"></i> {{ host.name if host is mapping else host }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if program.tags %}
+    <div class="detail-section">
+        <h3>标签</h3>
+        <div class="related-tags">
+            {% for tag in program.tags %}
+            <span class="related-tag" style="background: #fef3c7; color: #92400e;">
+                <i class="fas fa-tag"></i> {{ tag.name if tag is mapping else tag }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
     {% if program.author %}
     <div class="detail-section">
         <h3>提交者</h3>
@@ -64,7 +90,7 @@
     {% if referenced_by and referenced_by|length > 0 %}
     <div class="detail-section" style="background: #fef3c7; padding: 16px; border-radius: 8px; margin-top: 16px;">
         <h3 style="color: #92400e;"><i class="fas fa-link"></i> 被以下节目引用 ({{ referenced_by|length }}个)</h3>
-        <div style="margin-top: 12px;">
+            <div style="margin-top: 12px;">
             {% for ref in referenced_by %}
             <div style="display: flex; align-items: center; gap: 12px; padding: 10px; background: white; border-radius: 6px; margin-bottom: 8px;">
                 <i class="fas fa-arrow-right" style="color: #d97706;"></i>
