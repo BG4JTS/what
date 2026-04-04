@@ -3,7 +3,9 @@ import json
 import uuid
 import base64
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from authlib.integrations.flask_client import OAuth
 import requests
 
 app = Flask(__name__, 
@@ -13,6 +15,8 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
 GITHUB_REPO = os.environ.get('GITHUB_REPO', 'BG4JTS/what')
 GITHUB_API = 'https://api.github.com'
+GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID')
+GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
 
 IS_VERCEL = os.environ.get('VERCEL') == '1'
 
@@ -23,6 +27,50 @@ else:
 
 PROGRAMS_FILE = os.path.join(DATA_DIR, 'programs.json')
 PENDING_FILE = os.path.join(DATA_DIR, 'pending.json')
+USERS_FILE = os.path.join(DATA_DIR, 'users.json')
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+oauth = OAuth(app)
+oauth.register(
+    name='github',
+    client_id=GITHUB_CLIENT_ID,
+    client_secret=GITHUB_CLIENT_SECRET,
+    access_token_url='https://github.com/login/oauth/access_token',
+    access_token_params=None,
+    authorize_url='https://github.com/login/oauth/authorize',
+    authorize_params=None,
+    api_base_url='https://api.github.com/',
+    client_kwargs={'scope': 'user:email'},
+)
+
+class User(UserMixin):
+    def __init__(self, user_dict):
+        self.id = str(user_dict['id'])
+        self.username = user_dict['login']
+        self.avatar_url = user_dict.get('avatar_url', '')
+        self.email = user_dict.get('email', '')
+
+@login_manager.user_loader
+def load_user(user_id):
+    users = load_users()
+    for u in users:
+        if str(u['id']) == user_id:
+            return User(u)
+    return None
+
+def load_users():
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f).get('users', [])
+    return []
+
+def save_users(users):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(USERS_FILE, 'w', encoding='utf-8') as f:
+        json.dump({'users': users}, f, ensure_ascii=False, indent=2)
 
 def github_headers():
     return {
@@ -167,6 +215,59 @@ def index():
     programs = data.get('programs', [])
     return render_template('index.html', programs=programs)
 
+@app.route('/login')
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+@app.route('/login/github')
+def login_github():
+    if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
+        flash('GitHub OAuth未配置', 'error')
+        return redirect(url_for('login'))
+    redirect_uri = url_for('authorize', _external=True)
+    return oauth.github.authorize_redirect(redirect_uri)
+
+@app.route('/authorize')
+def authorize():
+    token = oauth.github.authorize_access_token()
+    resp = oauth.github.get('user', token=token)
+    user_info = resp.json()
+    
+    users = load_users()
+    user_exists = False
+    for u in users:
+        if u['id'] == user_info['id']:
+            u['login'] = user_info['login']
+            u['avatar_url'] = user_info.get('avatar_url', '')
+            u['email'] = user_info.get('email', '')
+            user_exists = True
+            break
+    
+    if not user_exists:
+        users.append({
+            'id': user_info['id'],
+            'login': user_info['login'],
+            'avatar_url': user_info.get('avatar_url', ''),
+            'email': user_info.get('email', ''),
+            'created_at': datetime.now().isoformat()
+        })
+    
+    save_users(users)
+    user = User(user_info)
+    login_user(user)
+    
+    flash(f'欢迎, {user.username}!', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('已退出登录', 'info')
+    return redirect(url_for('index'))
+
 @app.route('/sync')
 def sync():
     success, message = sync_from_github()
@@ -177,6 +278,7 @@ def sync():
     return redirect(url_for('index'))
 
 @app.route('/add', methods=['GET', 'POST'])
+@login_required
 def add_program():
     if request.method == 'POST':
         program = {
@@ -187,7 +289,8 @@ def add_program():
             'link': request.form.get('link'),
             'related': request.form.get('related', '').split(',') if request.form.get('related') else [],
             'status': 'pending',
-            'created_at': datetime.now().isoformat()
+            'created_at': datetime.now().isoformat(),
+            'author': current_user.username
         }
         
         if GITHUB_TOKEN:
@@ -207,7 +310,7 @@ def add_program():
                     f'[待审核] {program["title"]}',
                     branch_name,
                     'main',
-                    f'**节目信息**\n- 编号: {program["id"]}\n- 标题: {program["title"]}\n- 日期: {program["date"]}\n- 描述: {program["description"]}\n- 链接: {program["link"]}'
+                    f'**节目信息**\n- 编号: {program["id"]}\n- 标题: {program["title"]}\n- 日期: {program["date"]}\n- 描述: {program["description"]}\n- 链接: {program["link"]}\n- 提交者: {program["author"]}'
                 )
                 
                 if pr:
@@ -270,6 +373,8 @@ def init_data():
         save_programs_local({"programs": []})
     if not os.path.exists(PENDING_FILE):
         save_pending_local({"programs": []})
+    if not os.path.exists(USERS_FILE):
+        save_users([])
 
 init_data()
 
