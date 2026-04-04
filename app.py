@@ -1,12 +1,12 @@
 import os
 import json
 import uuid
-import base64
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from authlib.integrations.flask_client import OAuth
-import requests
+
+IS_VERCEL = os.environ.get('VERCEL') == '1'
 
 app = Flask(__name__, 
             template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates'))
@@ -21,19 +21,24 @@ GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
 ADMIN_THRESHOLD = 2
 INITIAL_ADMIN = os.environ.get('INITIAL_ADMIN', 'BG4JTS')
 
-IS_VERCEL = os.environ.get('VERCEL') == '1'
-
 if IS_VERCEL:
-    DATA_DIR = '/tmp/data'
+    # Vercel 环境使用内存存储
+    MEMORY_STORAGE = {
+        'tags': [],
+        'hosts': [],
+        'users': [],
+        'references': []
+    }
 else:
+    # 本地环境使用文件存储
+    MEMORY_STORAGE = None
     DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
-
-PROGRAMS_FILE = os.path.join(DATA_DIR, 'programs.json')
-PENDING_FILE = os.path.join(DATA_DIR, 'pending.json')
-USERS_FILE = os.path.join(DATA_DIR, 'users.json')
-REFERENCES_FILE = os.path.join(DATA_DIR, 'references.json')
-TAGS_FILE = os.path.join(DATA_DIR, 'tags.json')
-HOSTS_FILE = os.path.join(DATA_DIR, 'hosts.json')
+    PROGRAMS_FILE = os.path.join(DATA_DIR, 'programs.json')
+    PENDING_FILE = os.path.join(DATA_DIR, 'pending.json')
+    USERS_FILE = os.path.join(DATA_DIR, 'users.json')
+    REFERENCES_FILE = os.path.join(DATA_DIR, 'references.json')
+    TAGS_FILE = os.path.join(DATA_DIR, 'tags.json')
+    HOSTS_FILE = os.path.join(DATA_DIR, 'hosts.json')
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -69,42 +74,330 @@ def load_user(user_id):
             return User(u)
     return None
 
+def get_repo():
+    if IS_VERCEL:
+        return None
+    return git.Repo(os.path.dirname(os.path.abspath(__file__)))
+
+def init_branches():
+    if IS_VERCEL:
+        return
+    repo = get_repo()
+    branches = [b.name for b in repo.branches]
+    
+    if BRANCH_PENDING not in branches:
+        repo.git.branch(BRANCH_PENDING)
+    if BRANCH_APPROVED not in branches:
+        repo.git.branch(BRANCH_APPROVED)
+
+def load_programs_local():
+    if IS_VERCEL:
+        return {"programs": []}
+    if os.path.exists(PROGRAMS_FILE):
+        with open(PROGRAMS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {"programs": []}
+
+def save_programs_local(data):
+    if IS_VERCEL:
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(PROGRAMS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def load_pending_local():
+    if IS_VERCEL:
+        return {"programs": []}
+    if os.path.exists(PENDING_FILE):
+        with open(PENDING_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {"programs": []}
+
+def save_pending_local(data):
+    if IS_VERCEL:
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(PENDING_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 def load_users():
+    if IS_VERCEL:
+        return MEMORY_STORAGE.get('users', [])
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f).get('users', [])
+            return json.load(f)
     return []
 
 def save_users(users):
+    if IS_VERCEL:
+        MEMORY_STORAGE['users'] = users
+        return
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(USERS_FILE, 'w', encoding='utf-8') as f:
-        json.dump({'users': users}, f, ensure_ascii=False, indent=2)
-
-def get_user_by_id(user_id):
-    users = load_users()
-    for u in users:
-        if str(u['id']) == str(user_id):
-            return u
-    return None
-
-def update_user(user_data):
-    users = load_users()
-    for i, u in enumerate(users):
-        if str(u['id']) == str(user_data['id']):
-            users[i] = user_data
-            break
-    save_users(users)
+        json.dump(users, f, ensure_ascii=False, indent=2)
 
 def load_references():
+    if IS_VERCEL:
+        return {"references": MEMORY_STORAGE.get('references', [])}
     if os.path.exists(REFERENCES_FILE):
         with open(REFERENCES_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {"references": []}
 
 def save_references(data):
+    if IS_VERCEL:
+        MEMORY_STORAGE['references'] = data.get('references', [])
+        return
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(REFERENCES_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+def load_tags():
+    if IS_VERCEL:
+        return MEMORY_STORAGE.get('tags', [])
+    if os.path.exists(TAGS_FILE):
+        with open(TAGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f).get('tags', [])
+    return []
+
+def save_tags(tags):
+    if IS_VERCEL:
+        MEMORY_STORAGE['tags'] = tags
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(TAGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump({'tags': tags}, f, ensure_ascii=False, indent=2)
+
+def add_tag(tag_name, author):
+    tags = load_tags()
+    tag_lower = tag_name.strip().lower()
+    for t in tags:
+        if t.get('name', '').lower() == tag_lower:
+            return t
+    new_tag = {
+        'id': str(uuid.uuid4())[:8],
+        'name': tag_name.strip(),
+        'created_at': datetime.now().isoformat(),
+        'created_by': author
+    }
+    tags.append(new_tag)
+    save_tags(tags)
+    return new_tag
+
+def get_tag_by_id(tag_id):
+    tags = load_tags()
+    for t in tags:
+        if t['id'] == tag_id:
+            return t
+    return None
+
+def load_hosts():
+    if IS_VERCEL:
+        return MEMORY_STORAGE.get('hosts', [])
+    if os.path.exists(HOSTS_FILE):
+        with open(HOSTS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f).get('hosts', [])
+    return []
+
+def save_hosts(hosts):
+    if IS_VERCEL:
+        MEMORY_STORAGE['hosts'] = hosts
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(HOSTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump({'hosts': hosts}, f, ensure_ascii=False, indent=2)
+
+def add_host(host_name, author):
+    hosts = load_hosts()
+    host_lower = host_name.strip().lower()
+    for h in hosts:
+        if h.get('name', '').lower() == host_lower:
+            return h
+    new_host = {
+        'id': str(uuid.uuid4())[:8],
+        'name': host_name.strip(),
+        'created_at': datetime.now().isoformat(),
+        'created_by': author
+    }
+    hosts.append(new_host)
+    save_hosts(hosts)
+    return new_host
+
+def get_host_by_id(host_id):
+    hosts = load_hosts()
+    for h in hosts:
+        if h['id'] == host_id:
+            return h
+    return None
+
+def get_file_content(path, branch='main'):
+    import base64
+    if not GITHUB_TOKEN:
+        return None
+    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    import requests
+    try:
+        response = requests.get(url, headers=headers, params={'ref': branch})
+        if response.status_code == 200:
+            content = response.json()
+            return base64.b64decode(content['content']).decode('utf-8')
+        return None
+    except:
+        return None
+
+def update_file(path, content, message, branch='main'):
+    import base64
+    if not GITHUB_TOKEN:
+        return False
+    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    import requests
+    try:
+        response = requests.get(url, headers=headers, params={'ref': branch})
+        if response.status_code == 200:
+            sha = response.json()['sha']
+        else:
+            sha = None
+        
+        data = {
+            'message': message,
+            'content': base64.b64encode(content.encode('utf-8')).decode('utf-8'),
+            'branch': branch
+        }
+        if sha:
+            data['sha'] = sha
+        
+        response = requests.put(url, headers=headers, json=data)
+        return response.status_code in [200, 201]
+    except:
+        return False
+
+def create_branch(branch_name):
+    if not GITHUB_TOKEN:
+        return False
+    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/git/refs'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    import requests
+    try:
+        response = requests.get(url, headers=headers, params={'ref': 'heads/main'})
+        if response.status_code == 200:
+            main_ref = response.json()[0]
+            sha = main_ref['object']['sha']
+            
+            data = {
+                'ref': f'refs/heads/{branch_name}',
+                'sha': sha
+            }
+            response = requests.post(url, headers=headers, json=data)
+            return response.status_code == 201
+    except:
+        pass
+    return False
+
+def create_pr(title, body, head, base='main'):
+    if not GITHUB_TOKEN:
+        return None
+    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    import requests
+    try:
+        data = {
+            'title': title,
+            'body': body,
+            'head': head,
+            'base': base
+        }
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 201:
+            return response.json()
+    except:
+        pass
+    return None
+
+def merge_pr(pr_number):
+    if not GITHUB_TOKEN:
+        return False
+    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls/{pr_number}/merge'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    import requests
+    try:
+        data = {
+            'commit_title': f'Merge PR #{pr_number}',
+            'commit_message': 'Merged via API',
+            'squash': True
+        }
+        response = requests.put(url, headers=headers, json=data)
+        return response.status_code == 200
+    except:
+        pass
+    return False
+
+def close_pr(pr_number):
+    if not GITHUB_TOKEN:
+        return False
+    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls/{pr_number}'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    import requests
+    try:
+        data = {
+            'state': 'closed'
+        }
+        response = requests.patch(url, headers=headers, json=data)
+        return response.status_code == 200
+    except:
+        pass
+    return False
+
+def get_programs():
+    content = get_file_content('data/programs.json')
+    if content:
+        try:
+            return json.loads(content)
+        except:
+            pass
+    return load_programs_local()
+
+def get_pending():
+    content = get_file_content('data/pending.json')
+    if content:
+        try:
+            return json.loads(content)
+        except:
+            pass
+    return load_pending_local()
+
+def save_programs(data):
+    content = json.dumps(data, ensure_ascii=False, indent=2)
+    if update_file('data/programs.json', content, 'Update programs'):
+        return True
+    save_programs_local(data)
+    return False
+
+def save_pending(data):
+    content = json.dumps(data, ensure_ascii=False, indent=2)
+    if update_file('data/pending.json', content, 'Update pending programs'):
+        return True
+    save_pending_local(data)
+    return False
 
 def add_reference(target_code, target_title, source_program_id, source_program_title, author):
     refs = load_references()
@@ -140,285 +433,64 @@ def check_and_notify_references(program_code, program_title, program_id):
     
     return notifications
 
-def load_tags():
-    if os.path.exists(TAGS_FILE):
-        with open(TAGS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f).get('tags', [])
-    return []
-
-def save_tags(tags):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(TAGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump({'tags': tags}, f, ensure_ascii=False, indent=2)
-
-def add_tag(tag_name, author):
-    tags = load_tags()
-    tag_lower = tag_name.strip().lower()
-    for t in tags:
-        if t.get('name', '').lower() == tag_lower:
-            return t
-    new_tag = {
-        'id': str(uuid.uuid4())[:8],
-        'name': tag_name.strip(),
-        'created_at': datetime.now().isoformat(),
-        'created_by': author
-    }
-    tags.append(new_tag)
-    save_tags(tags)
-    return new_tag
-
-def get_tag_by_id(tag_id):
-    tags = load_tags()
-    for t in tags:
-        if t['id'] == tag_id:
-            return t
-    return None
-
-def load_hosts():
-    if os.path.exists(HOSTS_FILE):
-        with open(HOSTS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f).get('hosts', [])
-    return []
-
-def save_hosts(hosts):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(HOSTS_FILE, 'w', encoding='utf-8') as f:
-        json.dump({'hosts': hosts}, f, ensure_ascii=False, indent=2)
-
-def add_host(host_name, author):
-    hosts = load_hosts()
-    host_lower = host_name.strip().lower()
-    for h in hosts:
-        if h.get('name', '').lower() == host_lower:
-            return h
-    new_host = {
-        'id': str(uuid.uuid4())[:8],
-        'name': host_name.strip(),
-        'created_at': datetime.now().isoformat(),
-        'created_by': author
-    }
-    hosts.append(new_host)
-    save_hosts(hosts)
-    return new_host
-
-def get_host_by_id(host_id):
-    hosts = load_hosts()
-    for h in hosts:
-        if h['id'] == host_id:
-            return h
-    return None
-
-def github_headers():
-    return {
-        'Authorization': f'token {GITHUB_TOKEN}',
-        'Accept': 'application/vnd.github.v3+json'
-    }
-
-def get_file_sha(path, branch='main'):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}'
-    params = {'ref': branch}
-    resp = requests.get(url, headers=github_headers(), params=params)
-    if resp.status_code == 200:
-        return resp.json().get('sha')
-    return None
-
-def get_file_content(path, branch='main'):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}'
-    params = {'ref': branch}
-    resp = requests.get(url, headers=github_headers(), params=params)
-    if resp.status_code == 200:
-        content = resp.json().get('content', '')
-        if content:
-            return json.loads(base64.b64decode(content).decode('utf-8'))
-    return {"programs": []}
-
-def update_file(path, content, message, branch='main', sha=None):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/contents/{path}'
-    if sha is None:
-        sha = get_file_sha(path, branch)
-    data = {
-        'message': message,
-        'content': base64.b64encode(json.dumps(content, ensure_ascii=False, indent=2).encode('utf-8')).decode('utf-8'),
-        'branch': branch,
-        'sha': sha
-    }
-    resp = requests.put(url, headers=github_headers(), json=data)
-    return resp.status_code in [200, 201]
-
-def create_branch(branch_name, base_branch='main'):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/git/refs/heads/{base_branch}'
-    resp = requests.get(url, headers=github_headers())
-    if resp.status_code != 200:
-        return False
-    sha = resp.json()['object']['sha']
-    
-    create_url = f'{GITHUB_API}/repos/{GITHUB_REPO}/git/refs'
-    data = {
-        'ref': f'refs/heads/{branch_name}',
-        'sha': sha
-    }
-    resp = requests.post(create_url, headers=github_headers(), json=data)
-    return resp.status_code == 201
-
-def create_pr(title, head_branch, base_branch='main', body=''):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls'
-    data = {
-        'title': title,
-        'head': head_branch,
-        'base': base_branch,
-        'body': body
-    }
-    resp = requests.post(url, headers=github_headers(), json=data)
-    if resp.status_code == 201:
-        return resp.json()
-    return None
-
-def get_pr(pr_number):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls/{pr_number}'
-    resp = requests.get(url, headers=github_headers())
-    if resp.status_code == 200:
-        return resp.json()
-    return None
-
-def get_pr_list(state='open'):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls'
-    params = {'state': state, 'base': 'main'}
-    resp = requests.get(url, headers=github_headers(), params=params)
-    if resp.status_code == 200:
-        return resp.json()
-    return []
-
-def merge_pr(pr_number, commit_message=''):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls/{pr_number}/merge'
-    data = {
-        'commit_message': commit_message,
-        'merge_method': 'squash'
-    }
-    resp = requests.put(url, headers=github_headers(), json=data)
-    return resp.status_code == 200
-
-def close_pr(pr_number):
-    url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls/{pr_number}'
-    data = {'state': 'closed'}
-    resp = requests.patch(url, headers=github_headers(), json=data)
-    return resp.status_code == 200
-
-def load_programs_local():
-    if os.path.exists(PROGRAMS_FILE):
-        with open(PROGRAMS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {"programs": []}
-
-def save_programs_local(data):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(PROGRAMS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-def load_pending_local():
-    if os.path.exists(PENDING_FILE):
-        with open(PENDING_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {"programs": []}
-
-def save_pending_local(data):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(PENDING_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-def get_programs():
-    if GITHUB_TOKEN:
-        try:
-            data = get_file_content('data/programs.json', 'main')
-            if data.get('programs'):
-                save_programs_local(data)
-                return data
-        except:
-            pass
-    return load_programs_local()
-
-def get_program_by_code(code):
-    programs_data = get_programs()
-    for p in programs_data.get('programs', []):
-        if p.get('code', '').lower() == code.lower():
-            return p
-    return None
-
-def update_admin_status():
-    programs_data = get_programs()
-    programs = programs_data.get('programs', [])
+def update_user_approved_count(username):
     users = load_users()
-    updated = False
-    
-    author_counts = {}
-    for p in programs:
-        author = p.get('author')
-        if author:
-            author_counts[author] = author_counts.get(author, 0) + 1
-    
     for user in users:
-        count = author_counts.get(user['login'], 0)
-        if user.get('approved_count') != count:
-            user['approved_count'] = count
-            updated = True
-        
-        if count >= ADMIN_THRESHOLD and not user.get('is_admin'):
-            user['is_admin'] = True
-            updated = True
-        
-        if user['login'] == INITIAL_ADMIN and not user.get('is_admin'):
-            user['is_admin'] = True
-            updated = True
+        if user.get('login') == username:
+            user['approved_count'] = user.get('approved_count', 0) + 1
+            if user['approved_count'] >= ADMIN_THRESHOLD:
+                user['is_admin'] = True
+            save_users(users)
+            return True
+    return False
+
+@app.route('/login')
+def login():
+    redirect_uri = url_for('authorize', _external=True)
+    return oauth.github.authorize_redirect(redirect_uri)
+
+@app.route('/authorize')
+def authorize():
+    token = oauth.github.authorize_access_token()
+    resp = oauth.github.get('user')
+    user_info = resp.json()
     
-    if updated:
+    users = load_users()
+    existing_user = None
+    for u in users:
+        if u['id'] == user_info['id']:
+            existing_user = u
+            break
+    
+    if existing_user:
+        existing_user['login'] = user_info['login']
+        existing_user['avatar_url'] = user_info.get('avatar_url', '')
+        existing_user['email'] = user_info.get('email', '')
+        if existing_user['login'] == INITIAL_ADMIN:
+            existing_user['is_admin'] = True
+        save_users(users)
+    else:
+        new_user = {
+            'id': user_info['id'],
+            'login': user_info['login'],
+            'avatar_url': user_info.get('avatar_url', ''),
+            'email': user_info.get('email', ''),
+            'is_admin': user_info['login'] == INITIAL_ADMIN,
+            'approved_count': 0
+        }
+        users.append(new_user)
         save_users(users)
     
-    return updated
+    user = User(existing_user if existing_user else new_user)
+    login_user(user)
+    flash('登录成功！', 'success')
+    return redirect(url_for('index'))
 
-def sync_from_github():
-    if not GITHUB_TOKEN:
-        return False, "未配置GITHUB_TOKEN"
-    
-    try:
-        programs_data = get_file_content('data/programs.json', 'main')
-        pending_data = load_pending_local()
-        
-        url = f'{GITHUB_API}/repos/{GITHUB_REPO}/pulls'
-        params = {'state': 'all', 'base': 'main', 'per_page': 100}
-        resp = requests.get(url, headers=github_headers(), params=params)
-        all_prs = resp.json() if resp.status_code == 200 else []
-        
-        open_pr_ids = set()
-        merged_programs = []
-        
-        for pr in all_prs:
-            if pr['title'].startswith('[待审核]'):
-                if pr['state'] == 'open':
-                    for p in pending_data['programs']:
-                        if p.get('pr_number') == pr['number']:
-                            open_pr_ids.add(p['id'])
-                elif pr.get('merged_at'):
-                    for p in pending_data['programs']:
-                        if p.get('pr_number') == pr['number']:
-                            if not any(prog.get('pr_number') == pr['number'] for prog in programs_data.get('programs', [])):
-                                p['status'] = 'approved'
-                                p['approved_at'] = pr['merged_at']
-                                p['approved_by'] = pr.get('merged_by', {}).get('login', 'unknown') if pr.get('merged_by') else 'unknown'
-                                merged_programs.append(p)
-        
-        if merged_programs:
-            programs_data['programs'].extend(merged_programs)
-            update_file('data/programs.json', programs_data, f'同步合并已合并的PR节目')
-        
-        save_programs_local(programs_data)
-        
-        pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] in open_pr_ids or not p.get('pr_number')]
-        save_pending_local(pending_data)
-        
-        update_admin_status()
-        
-        return True, f"同步成功！共{len(programs_data.get('programs', []))}个节目"
-    except Exception as e:
-        return False, f"同步失败: {str(e)}"
+@app.route('/logout')
+def logout():
+    logout_user()
+    flash('已退出登录', 'info')
+    return redirect(url_for('index'))
 
 @app.route('/')
 def index():
@@ -453,98 +525,24 @@ def index():
     
     return render_template('index.html', programs=programs, pending_refs=pending_refs)
 
-@app.route('/login')
-def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-    return render_template('login.html')
-
-@app.route('/login/github')
-def login_github():
-    if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
-        flash('GitHub OAuth未配置', 'error')
-        return redirect(url_for('login'))
-    redirect_uri = url_for('authorize', _external=True)
-    return oauth.github.authorize_redirect(redirect_uri)
-
-@app.route('/authorize')
-def authorize():
-    token = oauth.github.authorize_access_token()
-    resp = oauth.github.get('user', token=token)
-    user_info = resp.json()
-    
-    users = load_users()
-    user_exists = False
-    for u in users:
-        if u['id'] == user_info['id']:
-            u['login'] = user_info['login']
-            u['avatar_url'] = user_info.get('avatar_url', '')
-            u['email'] = user_info.get('email', '')
-            user_exists = True
-            break
-    
-    if not user_exists:
-        users.append({
-            'id': user_info['id'],
-            'login': user_info['login'],
-            'avatar_url': user_info.get('avatar_url', ''),
-            'email': user_info.get('email', ''),
-            'created_at': datetime.now().isoformat(),
-            'is_admin': False,
-            'approved_count': 0
-        })
-    
-    save_users(users)
-    
-    update_admin_status()
-    
-    user = User(get_user_by_id(user_info['id']))
-    login_user(user)
-    
-    if user.is_admin:
-        flash(f'欢迎回来, 管理员 {user.username}!', 'success')
-    else:
-        flash(f'欢迎, {user.username}! 已通过 {user.approved_count}/{ADMIN_THRESHOLD} 个节目', 'success')
-    
-    return redirect(url_for('index'))
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    flash('已退出登录', 'info')
-    return redirect(url_for('index'))
-
-@app.route('/sync')
-@login_required
-def sync():
-    if not current_user.is_admin:
-        flash('只有管理员才能同步数据', 'error')
-        return redirect(url_for('index'))
-    
-    success, message = sync_from_github()
-    if success:
-        flash(message, 'success')
-    else:
-        flash(message, 'error')
-    return redirect(url_for('index'))
-
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_program():
+    programs = get_programs()
     if request.method == 'POST':
         code = request.form.get('code', '').strip()
-        
         if not code:
-            flash('番号是必填项！', 'error')
-            programs_data = get_programs()
-            return render_template('add.html', programs=programs_data.get('programs', []))
+            flash('请输入番号！', 'error')
+            return redirect(url_for('add_program'))
         
-        existing = get_program_by_code(code)
-        if existing:
-            flash(f'番号 "{code}" 已存在！请使用其他番号。', 'error')
-            programs_data = get_programs()
-            return render_template('add.html', programs=programs_data.get('programs', []))
+        pending_data = get_pending()
+        existing_codes = {p.get('code', '').lower() for p in pending_data.get('programs', [])}
+        programs_data = get_programs()
+        existing_codes.update({p.get('code', '').lower() for p in programs_data.get('programs', [])})
+        
+        if code.lower() in existing_codes:
+            flash('番号已存在，请使用其他番号！', 'error')
+            return redirect(url_for('add_program'))
         
         related_ids = request.form.getlist('related')
         tag_ids = request.form.getlist('tags')
@@ -568,161 +566,108 @@ def add_program():
             'author': current_user.username
         }
         
-        if GITHUB_TOKEN:
-            try:
-                branch_name = f'program-{program["id"]}'
-                create_branch(branch_name)
-                
-                pending_data = get_file_content('data/pending.json', branch_name)
-                if not pending_data.get('programs'):
-                    pending_data = {"programs": []}
-                pending_data['programs'].append(program)
-                
-                update_file('data/pending.json', pending_data, 
-                           f'添加待审核节目: {program["title"]} ({program["code"]})', branch_name)
-                
-                pr = create_pr(
-                    f'[待审核] {program["title"]} ({program["code"]})',
-                    branch_name,
-                    'main',
-                    f'**节目信息**\n- 番号: {program["code"]}\n- 编号: {program["id"]}\n- 标题: {program["title"]}\n- 日期: {program["date"]}\n- 描述: {program["description"]}\n- 链接: {program["link"]}\n- 提交者: {program["author"]}'
-                )
-                
-                if pr:
-                    program['pr_number'] = pr['number']
-                    program['branch'] = branch_name
-                    program['pr_url'] = pr['html_url']
-                    
-                    pending_local = load_pending_local()
-                    pending_local['programs'].append(program)
-                    save_pending_local(pending_local)
-                    
-                    if future_ref_code or future_ref_title:
-                        add_reference(future_ref_code, future_ref_title, program['id'], program['title'], current_user.username)
-                    
-                    flash(f'节目已提交！请在GitHub合并PR: #{pr["number"]}', 'success')
-                else:
-                    flash('创建PR失败', 'error')
-            except Exception as e:
-                flash(f'提交失败: {str(e)}', 'error')
-        else:
-            pending_data = load_pending_local()
-            pending_data['programs'].append(program)
-            save_pending_local(pending_data)
-            
-            if future_ref_code or future_ref_title:
-                add_reference(future_ref_code, future_ref_title, program['id'], program['title'], current_user.username)
-            
-            flash('节目已提交（本地模式）', 'success')
+        pending = get_pending()
+        pending['programs'].append(program)
         
+        if GITHUB_TOKEN:
+            branch_name = f'program-{program["id"]}'
+            if create_branch(branch_name):
+                if update_file('data/pending.json', json.dumps(pending, ensure_ascii=False, indent=2), f'Add program {program["title"]}', branch_name):
+                    pr = create_pr(
+                        f'[待审核] {program["title"]}',
+                        f'节目信息：\n- 番号：{program["code"]}\n- 标题：{program["title"]}\n- 发布日期：{program["date"]}\n- 提交者：{current_user.username}\n\n请审核并合并。',
+                        branch_name
+                    )
+                    if pr:
+                        program['pr_number'] = pr['number']
+                        program['branch'] = branch_name
+                        pending['programs'][-1] = program
+                        save_pending(pending)
+        else:
+            save_pending(pending)
+        
+        if future_ref_code or future_ref_title:
+            add_reference(future_ref_code, future_ref_title, program['id'], program['title'], current_user.username)
+        
+        flash('节目添加成功，已提交审核！', 'success')
         return redirect(url_for('index'))
     
-    programs_data = get_programs()
-    all_programs = programs_data.get('programs', [])
-    return render_template('add.html', programs=all_programs)
+    return render_template('add.html', programs=programs.get('programs', []))
 
 @app.route('/pending')
-def list_pending():
-    pending_data = load_pending_local()
-    programs = pending_data.get('programs', [])
+def pending_programs():
+    pending = get_pending()
+    programs = pending.get('programs', [])
     return render_template('pending.html', programs=programs)
 
 @app.route('/approve/<program_id>')
 @login_required
 def approve_program(program_id):
     if not current_user.is_admin:
-        flash('只有管理员才能审核节目', 'error')
-        return redirect(url_for('list_pending'))
+        flash('只有管理员可以审核节目！', 'error')
+        return redirect(url_for('pending_programs'))
     
-    pending_data = load_pending_local()
-    
+    pending = get_pending()
     program = None
-    for p in pending_data['programs']:
+    for p in pending['programs']:
         if p['id'] == program_id:
             program = p
             break
     
     if not program:
         flash('节目不存在！', 'error')
-        return redirect(url_for('list_pending'))
+        return redirect(url_for('pending_programs'))
     
+    programs = get_programs()
     program['status'] = 'approved'
     program['approved_at'] = datetime.now().isoformat()
     program['approved_by'] = current_user.username
+    programs['programs'].append(program)
+    
+    pending['programs'] = [p for p in pending['programs'] if p['id'] != program_id]
+    
+    save_programs(programs)
+    save_pending(pending)
     
     if GITHUB_TOKEN and program.get('pr_number'):
-        try:
-            programs_data = get_file_content('data/programs.json', 'main')
-            if not programs_data.get('programs'):
-                programs_data = {"programs": []}
-            programs_data['programs'].append(program)
-            
-            update_file('data/programs.json', programs_data, f'审核通过: {program["title"]} ({program.get("code", "")})')
-            
-            merge_pr(program['pr_number'], f'审核通过: {program["title"]} (审核者: {current_user.username})')
-            
-            save_programs_local(programs_data)
-            
-            pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
-            save_pending_local(pending_data)
-            
-            update_admin_status()
-            
-            notifications = check_and_notify_references(program.get('code', ''), program['title'], program['id'])
-            if notifications:
-                notification_msgs = [f'节目 "{n["source_program_title"]}" 引用了此节目' for n in notifications]
-                flash(f'节目 "{program["title"]}" 已审核通过！\n提醒: {"; ".join(notification_msgs)}', 'success')
-            else:
-                flash(f'节目 "{program["title"]}" 已审核通过！', 'success')
-        except Exception as e:
-            flash(f'审核失败: {str(e)}', 'error')
-    else:
-        programs_data = load_programs_local()
-        programs_data['programs'].append(program)
-        save_programs_local(programs_data)
-        
-        pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
-        save_pending_local(pending_data)
-        
-        notifications = check_and_notify_references(program.get('code', ''), program['title'], program['id'])
-        if notifications:
-            notification_msgs = [f'节目 "{n["source_program_title"]}" 引用了此节目' for n in notifications]
-            flash(f'节目 "{program["title"]}" 已审核通过！\n提醒: {"; ".join(notification_msgs)}', 'success')
-        else:
-            flash(f'节目 "{program["title"]}" 已审核通过！', 'success')
+        merge_pr(program['pr_number'])
     
-    return redirect(url_for('list_pending'))
+    update_user_approved_count(program.get('author', ''))
+    
+    notifications = check_and_notify_references(program['code'], program['title'], program['id'])
+    if notifications:
+        flash(f'节目审核通过，有 {len(notifications)} 个引用被匹配！', 'success')
+    else:
+        flash('节目审核通过！', 'success')
+    
+    return redirect(url_for('pending_programs'))
 
 @app.route('/reject/<program_id>')
 @login_required
 def reject_program(program_id):
     if not current_user.is_admin:
-        flash('只有管理员才能审核节目', 'error')
-        return redirect(url_for('list_pending'))
+        flash('只有管理员可以审核节目！', 'error')
+        return redirect(url_for('pending_programs'))
     
-    pending_data = load_pending_local()
-    
+    pending = get_pending()
     program = None
-    for p in pending_data['programs']:
+    for p in pending['programs']:
         if p['id'] == program_id:
             program = p
             break
     
     if not program:
         flash('节目不存在！', 'error')
-        return redirect(url_for('list_pending'))
+        return redirect(url_for('pending_programs'))
+    
+    pending['programs'] = [p for p in pending['programs'] if p['id'] != program_id]
+    save_pending(pending)
     
     if GITHUB_TOKEN and program.get('pr_number'):
-        try:
-            close_pr(program['pr_number'])
-        except:
-            pass
+        close_pr(program['pr_number'])
     
-    pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
-    save_pending_local(pending_data)
-    
-    flash(f'节目 "{program["title"]}" 已被拒绝！', 'info')
-    return redirect(url_for('list_pending'))
+    flash('节目已拒绝！', 'info')
+    return redirect(url_for('pending_programs'))
 
 @app.route('/program/<program_id>')
 def program_detail(program_id):
@@ -776,25 +721,28 @@ def program_detail(program_id):
 @app.route('/references')
 def list_references():
     refs = load_references()
-    references = refs.get('references', [])
-    return render_template('references.html', references=references)
+    return render_template('references.html', references=refs.get('references', []))
 
-def init_data():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(PROGRAMS_FILE):
-        save_programs_local({"programs": []})
-    if not os.path.exists(PENDING_FILE):
-        save_pending_local({"programs": []})
-    if not os.path.exists(USERS_FILE):
-        save_users([])
-    if not os.path.exists(REFERENCES_FILE):
-        save_references({"references": []})
-    if not os.path.exists(TAGS_FILE):
-        save_tags([])
-    if not os.path.exists(HOSTS_FILE):
-        save_hosts([])
-
-init_data()
+@app.route('/sync')
+@login_required
+def sync_data():
+    if not current_user.is_admin:
+        flash('只有管理员可以同步数据！', 'error')
+        return redirect(url_for('index'))
+    
+    try:
+        programs = get_programs()
+        pending = get_pending()
+        refs = load_references()
+        
+        for program in programs['programs']:
+            check_and_notify_references(program.get('code', ''), program.get('title', ''), program.get('id', ''))
+        
+        flash('数据同步成功！', 'success')
+    except Exception as e:
+        flash(f'同步失败: {e}', 'error')
+    
+    return redirect(url_for('index'))
 
 @app.route('/api/tags')
 def api_get_tags():
@@ -825,6 +773,24 @@ def api_add_host():
     
     host = add_host(name, current_user.username)
     return jsonify({'host': host})
+
+def init_data():
+    if not IS_VERCEL:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        if not os.path.exists(PROGRAMS_FILE):
+            save_programs_local({"programs": []})
+        if not os.path.exists(PENDING_FILE):
+            save_pending_local({"programs": []})
+        if not os.path.exists(USERS_FILE):
+            save_users([])
+        if not os.path.exists(REFERENCES_FILE):
+            save_references({"references": []})
+        if not os.path.exists(TAGS_FILE):
+            save_tags([])
+        if not os.path.exists(HOSTS_FILE):
+            save_hosts([])
+
+init_data()
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
