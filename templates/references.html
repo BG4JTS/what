@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}引用列表 - 节目管理系统{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">引用列表</h1>
+    <p class="page-desc">查看所有节目引用关系和待匹配的引用</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ references|length }}</div>
+        <div class="stat-label">总引用数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ references|selectattr('notified', 'equalto', true)|list|length }}</div>
+        <div class="stat-label">已匹配</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ references|selectattr('notified', 'equalto', false)|list|length }}</div>
+        <div class="stat-label">待匹配</div>
+    </div>
+</div>
+
+{% if references %}
+<div class="card-grid">
+    {% for ref in references %}
+    <div class="card">
+        <div class="card-header">
+            <span class="card-id">引用 #{{ loop.index }}</span>
+            {% if ref.notified %}
+            <span class="badge badge-success">已匹配</span>
+            {% else %}
+            <span class="badge badge-warning">待匹配</span>
+            {% endif %}
+        </div>
+        
+        <div style="margin-bottom: 12px;">
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">源节目</p>
+            <p style="font-weight: 500;">
+                <a href="{{ url_for('program_detail', program_id=ref.source_program_id) }}" style="color: var(--primary-color);">
+                    {{ ref.source_program_title }}
+                </a>
+            </p>
+        </div>
+        
+        <div style="margin-bottom: 12px;">
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">目标节目</p>
+            <p style="font-weight: 500;">
+                {% if ref.target_code %}番号: {{ ref.target_code }}{% endif %}
+                {% if ref.target_code and ref.target_title %} / {% endif %}
+                {% if ref.target_title %}名称: {{ ref.target_title }}{% endif %}
+            </p>
+        </div>
+        
+        {% if ref.notified and ref.matched_program_id %}
+        <div style="padding: 12px; background: #ecfdf5; border-radius: 8px; margin-bottom: 12px;">
+            <p style="font-size: 0.85rem; color: #065f46;">
+                <i class="fas fa-check-circle"></i>
+                已匹配到节目：
+                <a href="{{ url_for('program_detail', program_id=ref.matched_program_id) }}" style="color: #047857;">
+                    查看详情
+                </a>
+            </p>
+            <p style="font-size: 0.8rem; color: #065f46; margin-top: 4px;">
+                匹配时间: {{ ref.matched_at[:19].replace('T', ' ') }}
+            </p>
+        </div>
+        {% endif %}
+        
+        <div class="card-meta">
+            <span><i class="fas fa-user"></i> {{ ref.author }}</span>
+            <span><i class="fas fa-clock"></i> {{ ref.created_at[:19].replace('T', ' ') }}</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <i class="fas fa-link"></i>
+    <h3>暂无引用</h3>
+    <p>还没有任何节目引用关系</p>
+</div>
+{% endif %}
+{% endblock %}

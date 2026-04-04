@@ -8,6 +8,11 @@
 
 <div class="detail-card">
     <div class="detail-section">
+        <h3>番号</h3>
+        <p style="font-size: 1.25rem; font-weight: 600; color: var(--primary-color);">{{ program.code }}</p>
+    </div>
+    
+    <div class="detail-section">
         <h3>节目编号</h3>
         <p>#{{ program.id }}</p>
     </div>
@@ -49,7 +54,20 @@
         <div class="related-tags">
             {% for rel in related_programs %}
             <a href="{{ url_for('program_detail', program_id=rel.id) }}" class="related-tag">
-                {{ rel.title }}
+                {{ rel.code }} - {{ rel.title }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if referenced_by %}
+    <div class="detail-section">
+        <h3>被以下节目引用</h3>
+        <div class="related-tags">
+            {% for ref in referenced_by %}
+            <a href="{{ url_for('program_detail', program_id=ref.source_program_id) }}" class="related-tag" style="background: #fef3c7; color: #92400e;">
+                <i class="fas fa-link"></i> {{ ref.source_program_title }}
             </a>
             {% endfor %}
         </div>

@@ -7,6 +7,16 @@
     <p class="page-desc">浏览所有已审核通过的节目内容</p>
 </div>
 
+{% if pending_refs %}
+<div class="flash warning" style="margin-bottom: 24px;">
+    <i class="fas fa-bell"></i>
+    <div>
+        <strong>引用提醒</strong>：有 {{ pending_refs|length }} 个待引用的节目尚未上传
+        <a href="{{ url_for('list_references') }}" style="color: #92400e; margin-left: 10px;">查看详情</a>
+    </div>
+</div>
+{% endif %}
+
 {% if programs %}
 <div class="stats-grid">
     <div class="stat-card">
@@ -19,7 +29,7 @@
     {% for program in programs %}
     <div class="card">
         <div class="card-header">
-            <span class="card-id">#{{ program.id }}</span>
+            <span class="card-id">{{ program.code }}</span>
         </div>
         <h3 class="card-title">{{ program.title }}</h3>
         <div class="card-meta">

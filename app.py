@@ -18,7 +18,7 @@ GITHUB_API = 'https://api.github.com'
 GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID')
 GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
 
-ADMIN_THRESHOLD = 5
+ADMIN_THRESHOLD = 2
 INITIAL_ADMIN = os.environ.get('INITIAL_ADMIN', 'BG4JTS')
 
 IS_VERCEL = os.environ.get('VERCEL') == '1'
@@ -31,6 +31,7 @@ else:
 PROGRAMS_FILE = os.path.join(DATA_DIR, 'programs.json')
 PENDING_FILE = os.path.join(DATA_DIR, 'pending.json')
 USERS_FILE = os.path.join(DATA_DIR, 'users.json')
+REFERENCES_FILE = os.path.join(DATA_DIR, 'references.json')
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -91,6 +92,51 @@ def update_user(user_data):
             users[i] = user_data
             break
     save_users(users)
+
+def load_references():
+    if os.path.exists(REFERENCES_FILE):
+        with open(REFERENCES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {"references": []}
+
+def save_references(data):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(REFERENCES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def add_reference(target_code, target_title, source_program_id, source_program_title, author):
+    refs = load_references()
+    refs['references'].append({
+        'target_code': target_code,
+        'target_title': target_title,
+        'source_program_id': source_program_id,
+        'source_program_title': source_program_title,
+        'author': author,
+        'created_at': datetime.now().isoformat(),
+        'notified': False
+    })
+    save_references(refs)
+
+def check_and_notify_references(program_code, program_title, program_id):
+    refs = load_references()
+    notifications = []
+    
+    for ref in refs['references']:
+        if not ref.get('notified'):
+            target = ref.get('target_code', '').strip().lower()
+            target_title = ref.get('target_title', '').strip().lower()
+            
+            if (target and target == program_code.lower().strip()) or \
+               (target_title and target_title in program_title.lower()):
+                notifications.append(ref)
+                ref['notified'] = True
+                ref['matched_program_id'] = program_id
+                ref['matched_at'] = datetime.now().isoformat()
+    
+    if notifications:
+        save_references(refs)
+    
+    return notifications
 
 def github_headers():
     return {
@@ -220,6 +266,13 @@ def get_programs():
             pass
     return load_programs_local()
 
+def get_program_by_code(code):
+    programs_data = get_programs()
+    for p in programs_data.get('programs', []):
+        if p.get('code', '').lower() == code.lower():
+            return p
+    return None
+
 def update_admin_status():
     programs_data = get_programs()
     programs = programs_data.get('programs', [])
@@ -301,7 +354,9 @@ def sync_from_github():
 def index():
     data = get_programs()
     programs = data.get('programs', [])
-    return render_template('index.html', programs=programs)
+    refs = load_references()
+    pending_refs = [r for r in refs.get('references', []) if not r.get('notified')]
+    return render_template('index.html', programs=programs, pending_refs=pending_refs)
 
 @app.route('/login')
 def login():
@@ -383,13 +438,32 @@ def sync():
 @login_required
 def add_program():
     if request.method == 'POST':
+        code = request.form.get('code', '').strip()
+        
+        if not code:
+            flash('番号是必填项！', 'error')
+            programs_data = get_programs()
+            return render_template('add.html', programs=programs_data.get('programs', []))
+        
+        existing = get_program_by_code(code)
+        if existing:
+            flash(f'番号 "{code}" 已存在！请使用其他番号。', 'error')
+            programs_data = get_programs()
+            return render_template('add.html', programs=programs_data.get('programs', []))
+        
+        related_ids = request.form.getlist('related')
+        
+        future_ref_code = request.form.get('future_ref_code', '').strip()
+        future_ref_title = request.form.get('future_ref_title', '').strip()
+        
         program = {
             'id': str(uuid.uuid4())[:8],
+            'code': code,
             'title': request.form.get('title'),
             'description': request.form.get('description'),
             'date': request.form.get('date'),
             'link': request.form.get('link'),
-            'related': request.form.get('related', '').split(',') if request.form.get('related') else [],
+            'related': related_ids,
             'status': 'pending',
             'created_at': datetime.now().isoformat(),
             'author': current_user.username
@@ -406,13 +480,13 @@ def add_program():
                 pending_data['programs'].append(program)
                 
                 update_file('data/pending.json', pending_data, 
-                           f'添加待审核节目: {program["title"]}', branch_name)
+                           f'添加待审核节目: {program["title"]} ({program["code"]})', branch_name)
                 
                 pr = create_pr(
-                    f'[待审核] {program["title"]}',
+                    f'[待审核] {program["title"]} ({program["code"]})',
                     branch_name,
                     'main',
-                    f'**节目信息**\n- 编号: {program["id"]}\n- 标题: {program["title"]}\n- 日期: {program["date"]}\n- 描述: {program["description"]}\n- 链接: {program["link"]}\n- 提交者: {program["author"]}'
+                    f'**节目信息**\n- 番号: {program["code"]}\n- 编号: {program["id"]}\n- 标题: {program["title"]}\n- 日期: {program["date"]}\n- 描述: {program["description"]}\n- 链接: {program["link"]}\n- 提交者: {program["author"]}'
                 )
                 
                 if pr:
@@ -424,6 +498,9 @@ def add_program():
                     pending_local['programs'].append(program)
                     save_pending_local(pending_local)
                     
+                    if future_ref_code or future_ref_title:
+                        add_reference(future_ref_code, future_ref_title, program['id'], program['title'], current_user.username)
+                    
                     flash(f'节目已提交！请在GitHub合并PR: #{pr["number"]}', 'success')
                 else:
                     flash('创建PR失败', 'error')
@@ -433,6 +510,10 @@ def add_program():
             pending_data = load_pending_local()
             pending_data['programs'].append(program)
             save_pending_local(pending_data)
+            
+            if future_ref_code or future_ref_title:
+                add_reference(future_ref_code, future_ref_title, program['id'], program['title'], current_user.username)
+            
             flash('节目已提交（本地模式）', 'success')
         
         return redirect(url_for('index'))
@@ -477,7 +558,7 @@ def approve_program(program_id):
                 programs_data = {"programs": []}
             programs_data['programs'].append(program)
             
-            update_file('data/programs.json', programs_data, f'审核通过: {program["title"]}')
+            update_file('data/programs.json', programs_data, f'审核通过: {program["title"]} ({program.get("code", "")})')
             
             merge_pr(program['pr_number'], f'审核通过: {program["title"]} (审核者: {current_user.username})')
             
@@ -488,7 +569,12 @@ def approve_program(program_id):
             
             update_admin_status()
             
-            flash(f'节目 "{program["title"]}" 已审核通过！', 'success')
+            notifications = check_and_notify_references(program.get('code', ''), program['title'], program['id'])
+            if notifications:
+                notification_msgs = [f'节目 "{n["source_program_title"]}" 引用了此节目' for n in notifications]
+                flash(f'节目 "{program["title"]}" 已审核通过！\n提醒: {"; ".join(notification_msgs)}', 'success')
+            else:
+                flash(f'节目 "{program["title"]}" 已审核通过！', 'success')
         except Exception as e:
             flash(f'审核失败: {str(e)}', 'error')
     else:
@@ -499,7 +585,12 @@ def approve_program(program_id):
         pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
         save_pending_local(pending_data)
         
-        flash(f'节目 "{program["title"]}" 已审核通过！', 'success')
+        notifications = check_and_notify_references(program.get('code', ''), program['title'], program['id'])
+        if notifications:
+            notification_msgs = [f'节目 "{n["source_program_title"]}" 引用了此节目' for n in notifications]
+            flash(f'节目 "{program["title"]}" 已审核通过！\n提醒: {"; ".join(notification_msgs)}', 'success')
+        else:
+            flash(f'节目 "{program["title"]}" 已审核通过！', 'success')
     
     return redirect(url_for('list_pending'))
 
@@ -550,11 +641,20 @@ def program_detail(program_id):
     related_programs = []
     for rel_id in program.get('related', []):
         for p in programs_data['programs']:
-            if p['id'] == rel_id.strip():
+            if p['id'] == rel_id:
                 related_programs.append(p)
                 break
     
-    return render_template('detail.html', program=program, related_programs=related_programs)
+    refs = load_references()
+    referenced_by = [r for r in refs.get('references', []) if r.get('matched_program_id') == program_id]
+    
+    return render_template('detail.html', program=program, related_programs=related_programs, referenced_by=referenced_by)
+
+@app.route('/references')
+def list_references():
+    refs = load_references()
+    references = refs.get('references', [])
+    return render_template('references.html', references=references)
 
 def init_data():
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -564,6 +664,8 @@ def init_data():
         save_pending_local({"programs": []})
     if not os.path.exists(USERS_FILE):
         save_users([])
+    if not os.path.exists(REFERENCES_FILE):
+        save_references({"references": []})
 
 init_data()
 

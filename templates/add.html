@@ -10,6 +10,12 @@
 <div class="form-container">
     <form method="POST" action="{{ url_for('add_program') }}">
         <div class="form-group">
+            <label for="code">番号 * <span style="color: #dc2626;">(必填，唯一标识)</span></label>
+            <input type="text" id="code" name="code" required placeholder="如: EP001, A001 等">
+            <p class="form-hint">番号是节目的唯一标识符，不可重复</p>
+        </div>
+        
+        <div class="form-group">
             <label for="title">节目标题 *</label>
             <input type="text" id="title" name="title" required placeholder="请输入节目标题">
         </div>
@@ -31,13 +37,29 @@
         </div>
         
         <div class="form-group">
-            <label for="related">关联节目 (可选)</label>
+            <label for="related">关联已有节目</label>
             <select id="related" name="related" multiple style="height: 120px;">
                 {% for program in programs %}
-                <option value="{{ program.id }}">{{ program.title }} ({{ program.id }})</option>
+                <option value="{{ program.id }}">{{ program.code }} - {{ program.title }}</option>
                 {% endfor %}
             </select>
-            <p class="form-hint">按住 Ctrl 或 Cmd 键可多选</p>
+            <p class="form-hint">按住 Ctrl 或 Cmd 键可多选已有节目</p>
+        </div>
+        
+        <div class="form-group" style="background: #f0f9ff; padding: 16px; border-radius: 8px; border: 1px solid #bae6fd;">
+            <label style="color: #0369a1;"><i class="fas fa-link"></i> 引用未来节目 (可选)</label>
+            <p style="font-size: 0.85rem; color: #0369a1; margin-bottom: 12px;">
+                如果你想引用一个尚未上传的节目，填写下方信息。当该节目被上传时会收到提醒。
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <input type="text" name="future_ref_code" placeholder="目标节目番号">
+                </div>
+                <div>
+                    <input type="text" name="future_ref_title" placeholder="目标节目名称(部分匹配)">
+                </div>
+            </div>
+            <p class="form-hint">填写番号或名称即可，当匹配的节目被上传时会自动提醒</p>
         </div>
         
         <button type="submit" class="btn btn-primary" style="width: 100%;">
