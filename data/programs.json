@@ -180,6 +180,25 @@
       "pr_url": "https://github.com/BG4JTS/what/pull/21",
       "approved_at": "2026-04-04T06:49:53.588075",
       "approved_by": "BG4JTS"
+    },
+    {
+      "id": "b6f527a5",
+      "code": "005",
+      "title": "test005",
+      "description": "111",
+      "date": "2222-22-23",
+      "link": "https://what.bg4jts.cn/add",
+      "related": [],
+      "tags": [],
+      "hosts": [],
+      "status": "approved",
+      "created_at": "2026-04-04T07:21:13.256190",
+      "author": "BG4JTS",
+      "pr_number": 22,
+      "branch": "program-b6f527a5",
+      "pr_url": "https://github.com/BG4JTS/what/pull/22",
+      "approved_at": "2026-04-04T07:21:34.250772",
+      "approved_by": "BG4JTS"
     }
   ]
 }
