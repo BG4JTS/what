@@ -19,6 +19,7 @@ GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID')
 GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
 
 ADMIN_THRESHOLD = 5
+INITIAL_ADMIN = os.environ.get('INITIAL_ADMIN', 'BG4JTS')
 
 IS_VERCEL = os.environ.get('VERCEL') == '1'
 
@@ -223,6 +224,10 @@ def update_admin_status():
             updated = True
         
         if count >= ADMIN_THRESHOLD and not user.get('is_admin'):
+            user['is_admin'] = True
+            updated = True
+        
+        if user['login'] == INITIAL_ADMIN and not user.get('is_admin'):
             user['is_admin'] = True
             updated = True
     
