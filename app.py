@@ -18,6 +18,8 @@ GITHUB_API = 'https://api.github.com'
 GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID')
 GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
 
+ADMIN_THRESHOLD = 5
+
 IS_VERCEL = os.environ.get('VERCEL') == '1'
 
 if IS_VERCEL:
@@ -52,6 +54,8 @@ class User(UserMixin):
         self.username = user_dict['login']
         self.avatar_url = user_dict.get('avatar_url', '')
         self.email = user_dict.get('email', '')
+        self.is_admin = user_dict.get('is_admin', False)
+        self.approved_count = user_dict.get('approved_count', 0)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -71,6 +75,21 @@ def save_users(users):
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(USERS_FILE, 'w', encoding='utf-8') as f:
         json.dump({'users': users}, f, ensure_ascii=False, indent=2)
+
+def get_user_by_id(user_id):
+    users = load_users()
+    for u in users:
+        if str(u['id']) == str(user_id):
+            return u
+    return None
+
+def update_user(user_data):
+    users = load_users()
+    for i, u in enumerate(users):
+        if str(u['id']) == str(user_data['id']):
+            users[i] = user_data
+            break
+    save_users(users)
 
 def github_headers():
     return {
@@ -185,6 +204,33 @@ def get_programs():
             pass
     return load_programs_local()
 
+def update_admin_status():
+    programs_data = get_programs()
+    programs = programs_data.get('programs', [])
+    users = load_users()
+    updated = False
+    
+    author_counts = {}
+    for p in programs:
+        author = p.get('author')
+        if author:
+            author_counts[author] = author_counts.get(author, 0) + 1
+    
+    for user in users:
+        count = author_counts.get(user['login'], 0)
+        if user.get('approved_count') != count:
+            user['approved_count'] = count
+            updated = True
+        
+        if count >= ADMIN_THRESHOLD and not user.get('is_admin'):
+            user['is_admin'] = True
+            updated = True
+    
+    if updated:
+        save_users(users)
+    
+    return updated
+
 def sync_from_github():
     if not GITHUB_TOKEN:
         return False, "未配置GITHUB_TOKEN"
@@ -204,6 +250,8 @@ def sync_from_github():
         
         pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] in open_pr_ids or not p.get('pr_number')]
         save_pending_local(pending_data)
+        
+        update_admin_status()
         
         return True, f"同步成功！共{len(programs_data.get('programs', []))}个节目"
     except Exception as e:
@@ -251,14 +299,23 @@ def authorize():
             'login': user_info['login'],
             'avatar_url': user_info.get('avatar_url', ''),
             'email': user_info.get('email', ''),
-            'created_at': datetime.now().isoformat()
+            'created_at': datetime.now().isoformat(),
+            'is_admin': False,
+            'approved_count': 0
         })
     
     save_users(users)
-    user = User(user_info)
+    
+    update_admin_status()
+    
+    user = User(get_user_by_id(user_info['id']))
     login_user(user)
     
-    flash(f'欢迎, {user.username}!', 'success')
+    if user.is_admin:
+        flash(f'欢迎回来, 管理员 {user.username}!', 'success')
+    else:
+        flash(f'欢迎, {user.username}! 已通过 {user.approved_count}/{ADMIN_THRESHOLD} 个节目', 'success')
+    
     return redirect(url_for('index'))
 
 @app.route('/logout')
@@ -269,7 +326,12 @@ def logout():
     return redirect(url_for('index'))
 
 @app.route('/sync')
+@login_required
 def sync():
+    if not current_user.is_admin:
+        flash('只有管理员才能同步数据', 'error')
+        return redirect(url_for('index'))
+    
     success, message = sync_from_github()
     if success:
         flash(message, 'success')

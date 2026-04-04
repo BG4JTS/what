@@ -242,6 +242,19 @@
         .logout-btn:hover {
             text-decoration: underline;
         }
+        .admin-badge {
+            background: linear-gradient(135deg, #f39c12 0%, #e74c3c 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            margin-left: 5px;
+        }
+        .progress-text {
+            color: #6c757d;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
     </style>
 </head>
 <body>
@@ -254,12 +267,19 @@
                 <a href="{{ url_for('add_program') }}">添加节目</a>
                 {% endif %}
                 <a href="{{ url_for('list_pending') }}">待审核</a>
+                {% if current_user.is_authenticated and current_user.is_admin %}
                 <a href="{{ url_for('sync') }}">同步GitHub</a>
+                {% endif %}
             </nav>
             {% if current_user.is_authenticated %}
             <div class="user-info">
                 <img src="{{ current_user.avatar_url }}" alt="avatar" class="user-avatar">
                 <span class="user-name">{{ current_user.username }}</span>
+                {% if current_user.is_admin %}
+                <span class="admin-badge">管理员</span>
+                {% else %}
+                <span class="progress-text">{{ current_user.approved_count }}/5 成为管理员</span>
+                {% endif %}
                 <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>
             </div>
             {% else %}
