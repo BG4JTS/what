@@ -41,6 +41,22 @@
       "pr_url": "https://github.com/BG4JTS/what/pull/9",
       "approved_at": "2026-04-04T02:25:25.564002",
       "approved_by": "BG4JTS"
+    },
+    {
+      "id": "ae51bff4",
+      "title": "人",
+      "description": "2",
+      "date": "1111-11-33",
+      "link": "https://what.bg4jts.cn/add",
+      "related": [],
+      "status": "approved",
+      "created_at": "2026-04-04T02:27:00.640656",
+      "author": "BG4JTS",
+      "pr_number": 11,
+      "branch": "program-ae51bff4",
+      "pr_url": "https://github.com/BG4JTS/what/pull/11",
+      "approved_at": "2026-04-04T02:27:36.611413",
+      "approved_by": "BG4JTS"
     }
   ]
 }
