@@ -134,9 +134,20 @@ def save_pending_local(data):
     with open(PENDING_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+def get_programs():
+    if GITHUB_TOKEN:
+        try:
+            data = get_file_content('data/programs.json', 'main')
+            if data.get('programs'):
+                save_programs_local(data)
+                return data
+        except:
+            pass
+    return load_programs_local()
+
 @app.route('/')
 def index():
-    data = load_programs_local()
+    data = get_programs()
     programs = data.get('programs', [])
     return render_template('index.html', programs=programs)
 
@@ -195,7 +206,7 @@ def add_program():
         
         return redirect(url_for('index'))
     
-    programs_data = load_programs_local()
+    programs_data = get_programs()
     all_programs = programs_data.get('programs', [])
     return render_template('add.html', programs=all_programs)
 
@@ -208,7 +219,6 @@ def list_pending():
 @app.route('/approve/<program_id>')
 def approve_program(program_id):
     pending_data = load_pending_local()
-    programs_data = load_programs_local()
     
     program = None
     for p in pending_data['programs']:
@@ -223,19 +233,33 @@ def approve_program(program_id):
     program['status'] = 'approved'
     program['approved_at'] = datetime.now().isoformat()
     
-    programs_data['programs'].append(program)
-    save_programs_local(programs_data)
-    
-    pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
-    save_pending_local(pending_data)
-    
-    if GITHUB_TOKEN and program.get('pr_number'):
+    if GITHUB_TOKEN:
         try:
-            merge_pr(program['pr_number'], f'审核通过: {program["title"]}')
-            flash('节目已审核通过，PR已合并！', 'success')
+            programs_data = get_file_content('data/programs.json', 'main')
+            if not programs_data.get('programs'):
+                programs_data = {"programs": []}
+            programs_data['programs'].append(program)
+            update_file('data/programs.json', programs_data, f'审核通过: {program["title"]}')
+            
+            if program.get('pr_number'):
+                merge_pr(program['pr_number'], f'审核通过: {program["title"]}')
+            
+            save_programs_local(programs_data)
+            
+            pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
+            save_pending_local(pending_data)
+            
+            flash('节目已审核通过！', 'success')
         except Exception as e:
-            flash(f'审核成功，但合并PR失败: {str(e)}', 'warning')
+            flash(f'审核失败: {str(e)}', 'error')
     else:
+        programs_data = load_programs_local()
+        programs_data['programs'].append(program)
+        save_programs_local(programs_data)
+        
+        pending_data['programs'] = [p for p in pending_data['programs'] if p['id'] != program_id]
+        save_pending_local(pending_data)
+        
         flash('节目已审核通过！', 'success')
     
     return redirect(url_for('list_pending'))
@@ -268,7 +292,7 @@ def reject_program(program_id):
 
 @app.route('/program/<program_id>')
 def program_detail(program_id):
-    programs_data = load_programs_local()
+    programs_data = get_programs()
     program = None
     for p in programs_data['programs']:
         if p['id'] == program_id:
